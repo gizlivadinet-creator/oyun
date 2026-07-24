@@ -8,10 +8,28 @@ export default {
         display: ['Inter', 'system-ui', 'sans-serif'],
       },
       colors: {
+        // Claude.ai default theme palette. Overriding Tailwind's built-in
+        // `emerald` (accent) and `slate` (neutrals) scales means every
+        // existing `bg-emerald-500`, `text-slate-100`, etc. class across the
+        // whole app repaints as the Claude look with zero per-component
+        // changes — one source of truth for the theme.
+        emerald: {
+          // -> Claude's signature terracotta/clay accent (~#D97757)
+          50: '#FAF3EE', 100: '#F3E1D6', 200: '#E8C4AE', 300: '#DBA482',
+          400: '#E08A62', 500: '#D97757', 600: '#C15F3C', 700: '#A14A2C',
+          800: '#7D3A23', 900: '#5C2B1A', 950: '#3A1B10',
+        },
+        slate: {
+          // -> Claude's warm neutral (clay/stone) dark-mode scale instead of
+          // Tailwind's cool blue-gray.
+          50: '#FAF9F7', 100: '#F0EEE9', 200: '#E5E2DA', 300: '#CAC5B9',
+          400: '#A39C8E', 500: '#7C7565', 600: '#5C564A', 700: '#454039',
+          800: '#33302B', 900: '#262421', 950: '#191714',
+        },
         primary: {
-          50: '#ecfdf5', 100: '#d1fae5', 200: '#a7f3d0', 300: '#6ee7b7',
-          400: '#34d399', 500: '#10b981', 600: '#059669', 700: '#047857',
-          800: '#065f46', 900: '#064e3b', 950: '#022c22',
+          50: '#FAF3EE', 100: '#F3E1D6', 200: '#E8C4AE', 300: '#DBA482',
+          400: '#E08A62', 500: '#D97757', 600: '#C15F3C', 700: '#A14A2C',
+          800: '#7D3A23', 900: '#5C2B1A', 950: '#3A1B10',
         },
         accent: {
           50: '#fffbeb', 100: '#fef3c7', 200: '#fde68a', 300: '#fcd34d',
