@@ -107,29 +107,35 @@ export function AuthPage() {
             {mode === 'signup' && (
               <>
                 <div>
-                  <label className="label">{t('auth.displayName')}</label>
+                  <label htmlFor="auth-display-name" className="label">{t('auth.displayName')}</label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                     <input
+                      id="auth-display-name"
+                      name="displayName"
                       className="input pl-10"
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       placeholder="..."
                       maxLength={30}
+                      autoComplete="name"
                       required
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="label">{t('auth.username')}</label>
+                  <label htmlFor="auth-username" className="label">{t('auth.username')}</label>
                   <div className="relative">
                     <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                     <input
+                      id="auth-username"
+                      name="username"
                       className="input pl-10"
                       value={username}
                       onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
                       placeholder="username"
                       maxLength={20}
+                      autoComplete="username"
                     />
                   </div>
                   <p className="text-[10px] text-slate-500 mt-1">{t('auth.usernameHint')}</p>
@@ -138,10 +144,12 @@ export function AuthPage() {
             )}
 
             <div>
-              <label className="label">{t('auth.email')}</label>
+              <label htmlFor="auth-email" className="label">{t('auth.email')}</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <input
+                  id="auth-email"
+                  name="email"
                   type="email"
                   className="input pl-10"
                   value={email}
@@ -154,10 +162,12 @@ export function AuthPage() {
             </div>
 
             <div>
-              <label className="label">{t('auth.password')}</label>
+              <label htmlFor="auth-password" className="label">{t('auth.password')}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <input
+                  id="auth-password"
+                  name="password"
                   type="password"
                   className="input pl-10"
                   value={password}
@@ -172,10 +182,12 @@ export function AuthPage() {
 
             {mode === 'signup' && (
               <div>
-                <label className="label">{t('auth.confirmPassword')}</label>
+                <label htmlFor="auth-confirm-password" className="label">{t('auth.confirmPassword')}</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                   <input
+                    id="auth-confirm-password"
+                    name="confirmPassword"
                     type="password"
                     className="input pl-10"
                     value={confirm}
@@ -190,7 +202,7 @@ export function AuthPage() {
             )}
 
             {error && (
-              <div className="text-sm text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2 animate-scale-in">
+              <div role="alert" className="text-sm text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2 animate-scale-in">
                 {error}
               </div>
             )}
