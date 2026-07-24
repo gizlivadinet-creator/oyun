@@ -1,7 +1,7 @@
 {
-  "name": "SosyalArena — Sosyal Etkileşim Oyunu",
-  "short_name": "SosyalArena",
-  "description": "Sosyalleş, oyna, yüksel — AAA kalite sosyal etkileşim oyunu",
+  "name": "Sosyal Arena — Sosyal Etkileşim Oyunu",
+  "short_name": "Sosyal Arena",
+  "description": "Sosyalleş, oyna, Sosyal etkileşim oyunu",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
