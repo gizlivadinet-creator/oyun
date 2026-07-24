@@ -35,7 +35,7 @@ export interface Post {
   user_id: string;
   body: string;
   media_url: string | null;
-  media_type: 'image' | 'video' | null;
+  media_type: 'image' | 'video' | 'embed' | null;
   like_count: number;
   comment_count: number;
   created_at: string;

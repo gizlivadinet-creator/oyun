@@ -31,7 +31,7 @@ export async function fetchLikedIds(postIds: string[], userId: string): Promise<
 export async function createPost(
   body: string,
   userId: string,
-  media?: { url: string; type: 'image' | 'video' } | null,
+  media?: { url: string; type: 'image' | 'video' | 'embed' } | null,
 ): Promise<Post> {
   const { data, error } = await supabase
     .from('posts')
