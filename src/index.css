@@ -42,10 +42,14 @@
 
 @layer components {
   .glass {
-    @apply bg-slate-900/70 backdrop-blur-xl border border-white/5;
+    /* backdrop-blur-xl/2xl on every stacked card is one of the heaviest
+       GPU costs on mid/low-end mobile browsers (each blurred layer forces
+       a repaint of everything behind it). Dropping to blur-md/lg keeps the
+       frosted look with a much cheaper compositing cost. */
+    @apply bg-slate-900/80 backdrop-blur-md border border-white/5;
   }
   .glass-strong {
-    @apply bg-slate-900/90 backdrop-blur-2xl border border-white/10;
+    @apply bg-slate-900/95 backdrop-blur-lg border border-white/10;
   }
   .card {
     @apply glass rounded-2xl;
@@ -96,7 +100,7 @@
   .animate-float { animation: float 4s ease-in-out infinite; }
   .animate-spin-slow { animation: spin 3s linear infinite; }
   .gradient-emerald {
-    background: linear-gradient(135deg, #10b981 0%, #0d9488 100%);
+    background: linear-gradient(135deg, #D97757 0%, #C15F3C 100%);
   }
   .gradient-gold {
     background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
