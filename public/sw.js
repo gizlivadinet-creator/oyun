@@ -1,5 +1,5 @@
 const CACHE = 'sosyalarena-v1.0.0';
-const BASE = '/oyun/';
+const BASE = '/';
 const PRECACHE = [
   BASE,
   BASE + 'index.html',
