@@ -28,14 +28,39 @@ export async function fetchLikedIds(postIds: string[], userId: string): Promise<
   return new Set((data ?? []).map((l) => l.post_id));
 }
 
-export async function createPost(body: string, userId: string): Promise<Post> {
+export async function createPost(
+  body: string,
+  userId: string,
+  media?: { url: string; type: 'image' | 'video' } | null,
+): Promise<Post> {
   const { data, error } = await supabase
     .from('posts')
-    .insert({ body: body.trim(), user_id: userId })
+    .insert({
+      body: body.trim(),
+      user_id: userId,
+      media_url: media?.url ?? null,
+      media_type: media?.type ?? null,
+    })
     .select('*, author:profiles!posts_user_id_fkey(*)')
     .single();
   if (error) throw error;
   return data as unknown as Post;
+}
+
+export async function uploadPostMedia(
+  userId: string,
+  file: File,
+): Promise<{ url: string; type: 'image' | 'video' }> {
+  const type: 'image' | 'video' = file.type.startsWith('video/') ? 'video' : 'image';
+  const ext = file.name.split('.').pop()?.toLowerCase() || (type === 'video' ? 'mp4' : 'jpg');
+  const safeExt = ext.replace(/[^a-z0-9]/gi, '') || (type === 'video' ? 'mp4' : 'jpg');
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
+  const { error } = await supabase.storage
+    .from('post-media')
+    .upload(path, file, { upsert: false, cacheControl: '3600', contentType: file.type || undefined });
+  if (error) throw error;
+  const { data } = supabase.storage.from('post-media').getPublicUrl(path);
+  return { url: data.publicUrl, type };
 }
 
 export async function deletePost(postId: string, userId: string): Promise<void> {

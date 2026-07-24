@@ -31,46 +31,40 @@ export async function refreshMissionProgress(userId: string): Promise<void> {
   const dayStart = new Date(dailyKey + 'T00:00:00').toISOString();
   const weekStart = new Date(weeklyKey + 'T00:00:00').toISOString();
 
+  // Fire all count queries in parallel instead of one-at-a-time — this alone
+  // turns up to 5 sequential network round-trips into a single round-trip.
+  const jobs: Array<Promise<void>> = [];
   if (activeCodes.includes('daily_post')) {
-    const { count } = await supabase
-      .from('posts')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('created_at', dayStart);
-    counts['daily_post'] = count ?? 0;
+    jobs.push(
+      supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', dayStart)
+        .then(({ count }) => { counts['daily_post'] = count ?? 0; }),
+    );
   }
   if (activeCodes.includes('weekly_posts')) {
-    const { count } = await supabase
-      .from('posts')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('created_at', weekStart);
-    counts['weekly_posts'] = count ?? 0;
+    jobs.push(
+      supabase.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', weekStart)
+        .then(({ count }) => { counts['weekly_posts'] = count ?? 0; }),
+    );
   }
   if (activeCodes.includes('daily_comment')) {
-    const { count } = await supabase
-      .from('comments')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('created_at', dayStart);
-    counts['daily_comment'] = count ?? 0;
+    jobs.push(
+      supabase.from('comments').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', dayStart)
+        .then(({ count }) => { counts['daily_comment'] = count ?? 0; }),
+    );
   }
   if (activeCodes.includes('daily_like')) {
-    const { count } = await supabase
-      .from('likes')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('created_at', dayStart);
-    counts['daily_like'] = count ?? 0;
+    jobs.push(
+      supabase.from('likes').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', dayStart)
+        .then(({ count }) => { counts['daily_like'] = count ?? 0; }),
+    );
   }
   if (activeCodes.includes('weekly_follow')) {
-    const { count } = await supabase
-      .from('follows')
-      .select('id', { count: 'exact', head: true })
-      .eq('follower_id', userId)
-      .gte('created_at', weekStart);
-    counts['weekly_follow'] = count ?? 0;
+    jobs.push(
+      supabase.from('follows').select('id', { count: 'exact', head: true }).eq('follower_id', userId).gte('created_at', weekStart)
+        .then(({ count }) => { counts['weekly_follow'] = count ?? 0; }),
+    );
   }
+  await Promise.all(jobs);
 
   const upserts: Array<Partial<UserMission> & { user_id: string; mission_id: string; period_key: string }> = [];
 
@@ -122,26 +116,29 @@ export async function claimMissionReward(
 export async function checkAndAwardBadges(userId: string): Promise<BadgeAward[]> {
   const awards: BadgeAward[] = [];
 
-  const { data: earned } = await supabase
-    .from('user_badges')
-    .select('badge_id')
-    .eq('user_id', userId);
+  // All of these are independent reads — run them together instead of
+  // waiting on each one sequentially (was up to 7 round-trips, now 1).
+  const [
+    { data: earned },
+    { data: allBadges },
+    { data: profile },
+    postCount,
+    commentCount,
+    likeReceivedCount,
+    followCount,
+  ] = await Promise.all([
+    supabase.from('user_badges').select('badge_id').eq('user_id', userId),
+    supabase.from('badges').select('*'),
+    supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+    countRows('posts', 'user_id', userId),
+    countRows('comments', 'user_id', userId),
+    countLikesReceived(userId),
+    countRows('follows', 'follower_id', userId),
+  ]);
   const earnedIds = new Set((earned ?? []).map((r) => r.badge_id));
 
-  const { data: allBadges } = await supabase.from('badges').select('*');
   if (!allBadges) return awards;
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle();
   if (!profile) return awards;
-
-  const postCount = await countRows('posts', 'user_id', userId);
-  const commentCount = await countRows('comments', 'user_id', userId);
-  const likeReceivedCount = await countLikesReceived(userId);
-  const followCount = await countRows('follows', 'follower_id', userId);
 
   const criteria: Record<string, boolean> = {
     first_post: postCount >= 1,
@@ -172,6 +169,21 @@ export async function checkAndAwardBadges(userId: string): Promise<BadgeAward[]>
   }
 
   return awards;
+}
+
+/**
+ * Runs mission progress refresh + badge checks together (they're independent
+ * of each other) and never throws — intended to be called WITHOUT `await`
+ * right after a social action, so the UI doesn't block on gamification
+ * bookkeeping. Errors are swallowed/logged since this is best-effort.
+ */
+export function runGamificationInBackground(userId: string, refreshProfile?: () => Promise<void>): void {
+  Promise.all([
+    refreshMissionProgress(userId).catch((err) => console.error('mission refresh failed', err)),
+    checkAndAwardBadges(userId).catch((err) => console.error('badge check failed', err)),
+  ])
+    .then(() => refreshProfile?.())
+    .catch((err) => console.error('gamification background task failed', err));
 }
 
 export interface BadgeAward {

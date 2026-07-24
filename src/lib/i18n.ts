@@ -60,6 +60,11 @@ const tr: Dict = {
   'feed.justNow': 'az önce',
   'feed.loadMore': 'Daha fazla yükle',
   'feed.end': 'Hepsini gördün',
+  'feed.addImage': 'Görsel ekle',
+  'feed.addVideo': 'Video ekle',
+  'feed.removeMedia': 'Kaldır',
+  'feed.invalidVideo': 'Geçersiz video dosyası.',
+  'feed.videoTooLarge': 'Video çok büyük (maks 100MB).',
 
   // Profile
   'profile.level': 'Seviye',
@@ -269,6 +274,11 @@ const en: Dict = {
   'feed.justNow': 'just now',
   'feed.loadMore': 'Load more',
   'feed.end': "You're all caught up",
+  'feed.addImage': 'Add image',
+  'feed.addVideo': 'Add video',
+  'feed.removeMedia': 'Remove',
+  'feed.invalidVideo': 'Invalid video file.',
+  'feed.videoTooLarge': 'Video is too large (max 100MB).',
 
   'profile.level': 'Level',
   'profile.xp': 'XP',
