@@ -25,7 +25,7 @@ export function xpProgress(xp: number): {
 
 export const TIER_COLORS: Record<string, { ring: string; text: string; glow: string; label: string }> = {
   bronze: { ring: 'ring-amber-700/60', text: 'text-amber-600', glow: 'shadow-amber-900/30', label: 'Bronz' },
-  silver: { ring: 'ring-slate-400/60', text: 'text-slate-300', glow: 'shadow-slate-500/30', label: 'Gümüş' },
+  silver: { ring: 'ring-zinc-400/60', text: 'text-zinc-500', glow: 'shadow-zinc-500/30', label: 'Gümüş' },
   gold: { ring: 'ring-yellow-400/70', text: 'text-yellow-400', glow: 'shadow-yellow-500/40', label: 'Altın' },
   platinum: { ring: 'ring-cyan-300/70', text: 'text-cyan-300', glow: 'shadow-cyan-400/40', label: 'Platin' },
   diamond: { ring: 'ring-teal-300/80', text: 'text-teal-200', glow: 'shadow-teal-300/50', label: 'Elmas' },

@@ -115,6 +115,32 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
   return data as Profile | null;
 }
 
+export async function fetchProfileByUsername(username: string): Promise<Profile | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('username', username)
+    .maybeSingle();
+  if (error) throw error;
+  return data as Profile | null;
+}
+
+/**
+ * `/u/:handle` rotası hem username hem de id kabul eder.
+ * Önce username olarak dener, bulunamazsa id olarak dener.
+ * Handle geçerli bir UUID değilse (ör. bilinmeyen bir username), id
+ * sorgusu Postgres tarafında hataya düşer; bu durumda sessizce null döner.
+ */
+export async function resolveProfileByHandle(handle: string): Promise<Profile | null> {
+  const byUsername = await fetchProfileByUsername(handle);
+  if (byUsername) return byUsername;
+  try {
+    return await fetchProfile(handle);
+  } catch {
+    return null;
+  }
+}
+
 export async function uploadProfileImage(
   userId: string,
   file: File,
