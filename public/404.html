@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <title>SosyalArena</title>
+    <script type="text/javascript">
+      // GitHub Pages sunucu tarafı yönlendirme yapmadığı için, bilinmeyen bir
+      // path'e doğrudan girildiğinde (veya sayfa yenilendiğinde) GH Pages bu
+      // 404.html dosyasını sunar. Burada gerçek path'i query string içine
+      // kodlayıp base path olan /oyun/ köküne yönlendiriyoruz; index.html
+      // içindeki script bunu geri çözüp History API ile gerçek path'e geçiyor.
+      // Bkz: https://github.com/rafgraph/spa-github-pages
+      var pathSegmentsToKeep = 1; // '/oyun' -> 1 segment saklanır
+
+      var l = window.location;
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
+        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+        l.hash
+      );
+    </script>
+  </head>
+  <body>
+  </body>
+</html>

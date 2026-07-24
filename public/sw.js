@@ -1,10 +1,11 @@
-const CACHE = 'sosyalarena-v1';
+const CACHE = 'sosyalarena-v1.0.0';
+const BASE = '/oyun/';
 const PRECACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icons/icon.svg',
-  '/robots.txt',
+  BASE,
+  BASE + 'index.html',
+  BASE + 'manifest.json',
+  BASE + 'icons/icon.svg',
+  BASE + 'robots.txt',
 ];
 
 self.addEventListener('install', (event) => {
@@ -35,10 +36,10 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((res) => {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('/index.html', copy));
+          caches.open(CACHE).then((c) => c.put(BASE + 'index.html', copy));
           return res;
         })
-        .catch(() => caches.match('/index.html').then((r) => r || caches.match('/'))),
+        .catch(() => caches.match(BASE + 'index.html')),
     );
     return;
   }
