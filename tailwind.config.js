@@ -20,11 +20,14 @@ export default {
           800: '#7D3A23', 900: '#5C2B1A', 950: '#3A1B10',
         },
         slate: {
-          // -> Claude's warm neutral (clay/stone) dark-mode scale instead of
-          // Tailwind's cool blue-gray.
-          50: '#FAF9F7', 100: '#F0EEE9', 200: '#E5E2DA', 300: '#CAC5B9',
-          400: '#A39C8E', 500: '#7C7565', 600: '#5C564A', 700: '#454039',
-          800: '#33302B', 900: '#262421', 950: '#191714',
+          // Claude.ai's real *light* theme — warm cream backgrounds, dark
+          // warm-ink text. Same numeric keys as before (so no component
+          // needed to change), values flipped: high numbers (used for page
+          // background) are now the lightest cream, low numbers (used for
+          // primary text) are now the darkest ink. NEVER pure black/white.
+          50: '#171310', 100: '#221E18', 200: '#332E26', 300: '#4A4438',
+          400: '#6B6355', 500: '#8A8172', 600: '#B8AF9C', 700: '#D6CFC0',
+          800: '#E3DDD0', 900: '#EDE8DE', 950: '#F5F1EA',
         },
         primary: {
           50: '#FAF3EE', 100: '#F3E1D6', 200: '#E8C4AE', 300: '#DBA482',
