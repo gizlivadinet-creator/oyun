@@ -4,7 +4,7 @@ type Dict = Record<string, string>;
 
 const tr: Dict = {
   // App
-  'app.name': 'SosyalArena',
+  'app.name': 'Sosyal Arena',
   'app.tagline': 'Sosyalleş, oyna, yüksel',
 
   // Auth
@@ -225,7 +225,7 @@ const tr: Dict = {
 };
 
 const en: Dict = {
-  'app.name': 'SocialArena',
+  'app.name': 'Social Arena',
   'app.tagline': 'Socialize, play, rise',
 
   'auth.welcome': 'Welcome',
