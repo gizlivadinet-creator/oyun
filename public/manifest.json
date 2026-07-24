@@ -1,9 +1,9 @@
 {
   "name": "SosyalArena — Sosyal Etkileşim Oyunu",
-  "short_name": "SosyalArena",
-  "description": "Sosyalleş, oyna, yüksel — AAA kalite sosyal etkileşim oyunu",
-  "start_url": "/oyun/",
-  "scope": "/oyun/",
+  "short_name": "Sosyal Arena",
+  "description": "Sosyalleş, oyna, yüksel — Sosyal etkileşim oyunu",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#F5F1EA",
@@ -13,7 +13,7 @@
   "categories": ["social", "games", "entertainment"],
   "icons": [
     {
-      "src": "/oyun/icons/icon.svg",
+      "src": "/icons/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
@@ -25,7 +25,7 @@
       "purpose": "any maskable"
     },
     {
-      "src": "/oyun/icons/icon-512.png",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
