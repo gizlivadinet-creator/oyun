@@ -6,6 +6,7 @@ import { AuthPage } from '@/pages/AuthPage';
 import { Onboarding } from '@/pages/Onboarding';
 import { AppShell } from '@/components/AppShell';
 import { useSettings } from '@/context/SettingsContext';
+import { RouterProvider } from '@/lib/router';
 
 function Gate() {
   const { session, profile, loading, needsOnboarding } = useAuth();
@@ -29,10 +30,12 @@ function Gate() {
 export default function App() {
   return (
     <SettingsProvider>
-      <AuthProvider>
-        <Gate />
-        <ToastContainer />
-      </AuthProvider>
+      <RouterProvider>
+        <AuthProvider>
+          <Gate />
+          <ToastContainer />
+        </AuthProvider>
+      </RouterProvider>
     </SettingsProvider>
   );
 }

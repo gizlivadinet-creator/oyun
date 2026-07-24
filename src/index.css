@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   html {
@@ -30,14 +30,14 @@
   }
 
   ::selection {
-    @apply bg-emerald-500/40 text-white;
+    @apply bg-emerald-500/30 text-slate-100;
   }
 
   /* Custom scrollbar */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { @apply bg-slate-700 rounded-full; }
-  ::-webkit-scrollbar-thumb:hover { @apply bg-slate-600; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-600 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-slate-500; }
 }
 
 @layer components {
@@ -46,31 +46,31 @@
        GPU costs on mid/low-end mobile browsers (each blurred layer forces
        a repaint of everything behind it). Dropping to blur-md/lg keeps the
        frosted look with a much cheaper compositing cost. */
-    @apply bg-slate-900/80 backdrop-blur-md border border-white/5;
+    @apply bg-white/85 backdrop-blur-md border border-black/5;
   }
   .glass-strong {
-    @apply bg-slate-900/95 backdrop-blur-lg border border-white/10;
+    @apply bg-white/95 backdrop-blur-lg border border-black/5;
   }
   .card {
-    @apply glass rounded-2xl;
+    @apply glass rounded-2xl shadow-sm shadow-black/5;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
   }
   .btn-primary {
-    @apply btn bg-emerald-500 text-slate-950 hover:bg-emerald-400 shadow-lg shadow-emerald-500/20;
+    @apply btn bg-emerald-500 text-slate-950 hover:bg-emerald-600 shadow-lg shadow-emerald-500/20;
   }
   .btn-secondary {
-    @apply btn bg-white/5 text-slate-100 hover:bg-white/10 border border-white/10;
+    @apply btn bg-black/5 text-slate-100 hover:bg-black/10 border border-black/10;
   }
   .btn-ghost {
-    @apply btn text-slate-300 hover:bg-white/5;
+    @apply btn text-slate-300 hover:bg-black/5;
   }
   .btn-danger {
     @apply btn bg-rose-500/90 text-white hover:bg-rose-500;
   }
   .input {
-    @apply w-full rounded-xl bg-slate-800/60 border border-white/10 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 outline-none transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20;
+    @apply w-full rounded-xl bg-white/70 border border-black/10 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 outline-none transition focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20;
   }
   .label {
     @apply block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5;
@@ -93,7 +93,7 @@
   .animate-scale-in { animation: scaleIn 0.2s ease-out both; }
   .animate-pop { animation: pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
   .animate-shimmer {
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+    background: linear-gradient(90deg, transparent, rgba(0,0,0,0.06), transparent);
     background-size: 200% 100%;
     animation: shimmer 1.4s infinite;
   }
