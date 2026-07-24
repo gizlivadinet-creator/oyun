@@ -90,6 +90,21 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
   return data as Profile | null;
 }
 
+export async function uploadProfileImage(
+  userId: string,
+  file: File,
+  kind: 'avatar' | 'cover',
+): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const path = `${userId}/${kind}.${ext}`;
+  const { error } = await supabase.storage
+    .from('profile-media')
+    .upload(path, file, { upsert: true, cacheControl: '3600' });
+  if (error) throw error;
+  const { data } = supabase.storage.from('profile-media').getPublicUrl(path);
+  return `${data.publicUrl}?t=${Date.now()}`;
+}
+
 export async function updateProfile(userId: string, patch: Partial<Profile>): Promise<void> {
   const { error } = await supabase
     .from('profiles')

@@ -15,6 +15,7 @@ export interface Profile {
   display_name: string;
   username: string | null;
   avatar_url: string | null;
+  cover_url: string | null;
   bio: string;
   level: number;
   xp: number;

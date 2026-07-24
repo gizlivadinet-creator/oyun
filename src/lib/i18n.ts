@@ -83,6 +83,11 @@ const tr: Dict = {
   'profile.noBadges': 'Rozet yok henüz.',
   'profile.stats': 'İstatistikler',
   'profile.days': 'gün',
+  'profile.changeAvatar': 'Fotoğrafı Değiştir',
+  'profile.changeCover': 'Kapak Fotoğrafını Değiştir',
+  'profile.uploading': 'Yükleniyor...',
+  'profile.imageTooLarge': 'Görsel çok büyük (maks 5MB).',
+  'profile.invalidImage': 'Geçersiz görsel dosyası.',
 
   // Missions
   'mission.title': 'Görevler',
@@ -286,6 +291,11 @@ const en: Dict = {
   'profile.noBadges': 'No badges yet.',
   'profile.stats': 'Stats',
   'profile.days': 'days',
+  'profile.changeAvatar': 'Change Photo',
+  'profile.changeCover': 'Change Cover Photo',
+  'profile.uploading': 'Uploading...',
+  'profile.imageTooLarge': 'Image is too large (max 5MB).',
+  'profile.invalidImage': 'Invalid image file.',
 
   'mission.title': 'Missions',
   'mission.daily': 'Daily',
