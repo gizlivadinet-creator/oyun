@@ -78,7 +78,7 @@ CREATE POLICY "follows_delete_self" ON follows FOR DELETE TO authenticated USING
 -- POSTS
 CREATE TABLE IF NOT EXISTS posts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES profiles(id) ON DELETE CASCADE,
   body text NOT NULL CHECK (char_length(body) BETWEEN 1 AND 500),
   media_url text,
   like_count int NOT NULL DEFAULT 0,
@@ -118,7 +118,7 @@ CREATE INDEX IF NOT EXISTS likes_post_id_idx ON likes (post_id);
 CREATE TABLE IF NOT EXISTS comments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   post_id uuid NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES profiles(id) ON DELETE CASCADE,
   body text NOT NULL CHECK (char_length(body) BETWEEN 1 AND 300),
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -137,7 +137,7 @@ CREATE INDEX IF NOT EXISTS comments_post_id_idx ON comments (post_id, created_at
 CREATE TABLE IF NOT EXISTS notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
-  actor_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  actor_id uuid REFERENCES profiles(id) ON DELETE CASCADE,
   type text NOT NULL CHECK (type IN ('follow','like','comment','badge','levelup','system')),
   body text NOT NULL DEFAULT '',
   link text,
