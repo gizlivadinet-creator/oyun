@@ -62,7 +62,7 @@ export function Modal({ open, onClose, title, children, footer, className }: Mod
         </div>
 
         {footer && (
-          <div className="shrink-0 px-5 pt-3 pb-5 safe-bottom border-t border-white/5 mt-2">
+          <div className="shrink-0 px-5 pt-3 pb-5 safe-bottom border-t border-black/5 mt-2">
             {footer}
           </div>
         )}
