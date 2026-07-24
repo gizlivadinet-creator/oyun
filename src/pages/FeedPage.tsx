@@ -1,22 +1,27 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Heart, MessageCircle, Trash2, Send, Plus, Loader2 } from 'lucide-react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { Heart, MessageCircle, Trash2, Send, Plus, Loader2, Image as ImageIcon, Video, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { Avatar } from '@/components/Avatar';
 import { Modal } from '@/components/Modal';
 import { Spinner } from '@/components/Spinner';
 import { toast } from '@/components/Toast';
+import { PostMedia } from '@/components/PostMedia';
+import { Lightbox, type LightboxItem } from '@/components/Lightbox';
 import { cn, timeAgo, formatNumber } from '@/lib/utils';
 import {
   fetchFeed, fetchLikedIds, createPost, deletePost, toggleLike,
-  fetchComments, createComment,
+  fetchComments, createComment, uploadPostMedia,
 } from '@/lib/services';
-import { refreshMissionProgress, checkAndAwardBadges } from '@/lib/missions';
+import { runGamificationInBackground } from '@/lib/missions';
 import type { Post, Comment } from '@/lib/types';
 
 interface FeedPageProps {
   onOpenProfile: (id: string) => void;
 }
+
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 export function FeedPage({ onOpenProfile }: FeedPageProps) {
   const { profile, user, refreshProfile } = useAuth();
@@ -33,6 +38,14 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
   const [commentText, setCommentText] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   const [sendingComment, setSendingComment] = useState(false);
+  const [lightbox, setLightbox] = useState<LightboxItem | null>(null);
+
+  // Composer attachment state
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [mediaKind, setMediaKind] = useState<'image' | 'video' | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async (p: number, replace: boolean) => {
     try {
@@ -59,24 +72,65 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
     load(0, true);
   }, [load]);
 
+  useEffect(() => {
+    return () => {
+      if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+    };
+  }, [mediaPreview]);
+
+  const pickMedia = (kind: 'image' | 'video', file: File | undefined) => {
+    if (!file) return;
+    const maxBytes = kind === 'image' ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+    if (kind === 'image' && !file.type.startsWith('image/')) {
+      toast(t('profile.invalidImage'), 'error');
+      return;
+    }
+    if (kind === 'video' && !file.type.startsWith('video/')) {
+      toast(t('feed.invalidVideo'), 'error');
+      return;
+    }
+    if (file.size > maxBytes) {
+      toast(kind === 'image' ? t('profile.imageTooLarge') : t('feed.videoTooLarge'), 'error');
+      return;
+    }
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+    setMediaFile(file);
+    setMediaKind(kind);
+    setMediaPreview(URL.createObjectURL(file));
+  };
+
+  const clearMedia = () => {
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+    setMediaFile(null);
+    setMediaPreview(null);
+    setMediaKind(null);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+    if (videoInputRef.current) videoInputRef.current.value = '';
+  };
+
   const handlePost = async () => {
     const body = composing.trim();
-    if (!body || !user || !profile) return;
+    if ((!body && !mediaFile) || !user || !profile) return;
     if (body.length > 500) {
       toast(t('feed.tooLong'), 'error');
       return;
     }
     setPosting(true);
     try {
-      const newPost = await createPost(body, user.id);
+      let media: { url: string; type: 'image' | 'video' } | null = null;
+      if (mediaFile) {
+        media = await uploadPostMedia(user.id, mediaFile);
+      }
+      const newPost = await createPost(body, user.id, media);
       newPost.author = profile;
       newPost.liked_by_me = false;
       setPosts((prev) => [newPost, ...prev]);
       setComposing('');
+      clearMedia();
       toast(`+10 XP`, 'success');
-      await refreshMissionProgress(user.id);
-      await checkAndAwardBadges(user.id);
-      await refreshProfile();
+      // Gamification bookkeeping runs in the background so the composer
+      // doesn't sit there waiting on 5+ extra network round-trips.
+      runGamificationInBackground(user.id, refreshProfile);
     } catch (err) {
       toast(t('common.error'), 'error');
       console.error(err);
@@ -97,7 +151,7 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
     );
     try {
       await toggleLike(post.id, user.id, liked);
-      await refreshMissionProgress(user.id);
+      runGamificationInBackground(user.id);
     } catch (err) {
       setPosts((prev) =>
         prev.map((p) =>
@@ -152,9 +206,7 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
         ),
       );
       toast(`+5 XP`, 'success');
-      await refreshMissionProgress(user.id);
-      await checkAndAwardBadges(user.id);
-      await refreshProfile();
+      runGamificationInBackground(user.id, refreshProfile);
     } catch {
       toast(t('common.error'), 'error');
     } finally {
@@ -182,7 +234,7 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
       <div className="card p-4 animate-slide-up">
         <div className="flex gap-3">
           <Avatar id={profile?.id ?? ''} name={profile?.display_name ?? ''} url={profile?.avatar_url} size="md" />
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <textarea
               className="input min-h-[60px] resize-none"
               value={composing}
@@ -190,11 +242,66 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
               placeholder={t('feed.createPlaceholder')}
               maxLength={500}
             />
+
+            {mediaPreview && (
+              <div className="relative mt-2 rounded-xl overflow-hidden border border-white/10 w-fit max-w-full">
+                {mediaKind === 'image' ? (
+                  <img src={mediaPreview} alt="" className="max-h-48 object-cover" />
+                ) : (
+                  <video src={mediaPreview} className="max-h-48" controls muted />
+                )}
+                <button
+                  onClick={clearMedia}
+                  type="button"
+                  className="absolute top-1.5 right-1.5 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80 transition-colors"
+                  aria-label={t('feed.removeMedia')}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center justify-between mt-2">
-              <span className="text-[10px] text-slate-500 tabular-nums">{composing.length}/500</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={posting}
+                  className="btn-ghost p-2 rounded-lg text-slate-400 hover:text-emerald-400"
+                  aria-label={t('feed.addImage')}
+                  title={t('feed.addImage')}
+                >
+                  <ImageIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => videoInputRef.current?.click()}
+                  disabled={posting}
+                  className="btn-ghost p-2 rounded-lg text-slate-400 hover:text-emerald-400"
+                  aria-label={t('feed.addVideo')}
+                  title={t('feed.addVideo')}
+                >
+                  <Video className="h-4 w-4" />
+                </button>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { pickMedia('image', e.target.files?.[0]); e.target.value = ''; }}
+                />
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(e) => { pickMedia('video', e.target.files?.[0]); e.target.value = ''; }}
+                />
+                <span className="text-[10px] text-slate-500 tabular-nums ml-1">{composing.length}/500</span>
+              </div>
               <button
                 onClick={handlePost}
-                disabled={!composing.trim() || posting}
+                disabled={(!composing.trim() && !mediaFile) || posting}
                 className="btn-primary py-2 px-4 text-xs"
               >
                 {posting ? <Spinner size="sm" /> : <><Plus className="h-3.5 w-3.5" /> {t('feed.post')}</>}
@@ -219,6 +326,7 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
             onComment={() => openComments(post)}
             onDelete={() => handleDelete(post)}
             onOpenProfile={() => onOpenProfile(post.user_id)}
+            onOpenMedia={() => post.media_url && setLightbox({ url: post.media_url, type: post.media_type === 'video' ? 'video' : 'image' })}
             isOwner={post.user_id === user?.id}
             timeLabel={timeAgo(post.created_at, locale)}
           />
@@ -241,8 +349,23 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
         open={!!commentModal}
         onClose={() => setCommentModal(null)}
         title={t('feed.comments')}
+        footer={
+          <div className="flex gap-2">
+            <input
+              className="input flex-1"
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
+              placeholder={t('feed.commentPlaceholder')}
+              maxLength={300}
+              onKeyDown={(e) => e.key === 'Enter' && sendComment()}
+            />
+            <button onClick={sendComment} className="btn-primary px-3" disabled={!commentText.trim() || sendingComment}>
+              {sendingComment ? <Spinner size="sm" /> : <Send className="h-4 w-4" />}
+            </button>
+          </div>
+        }
       >
-        <div className="space-y-3 max-h-[40vh] overflow-y-auto no-scrollbar mb-3">
+        <div className="space-y-3 max-h-[40vh] overflow-y-auto no-scrollbar">
           {loadingComments ? (
             <div className="flex justify-center py-6"><Spinner /></div>
           ) : comments.length === 0 ? (
@@ -269,20 +392,9 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
             ))
           )}
         </div>
-        <div className="flex gap-2">
-          <input
-            className="input flex-1"
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
-            placeholder={t('feed.commentPlaceholder')}
-            maxLength={300}
-            onKeyDown={(e) => e.key === 'Enter' && sendComment()}
-          />
-          <button onClick={sendComment} className="btn-primary px-3" disabled={!commentText.trim() || sendingComment}>
-            {sendingComment ? <Spinner size="sm" /> : <Send className="h-4 w-4" />}
-          </button>
-        </div>
       </Modal>
+
+      <Lightbox item={lightbox} onClose={() => setLightbox(null)} />
     </div>
   );
 }
@@ -294,11 +406,12 @@ interface PostCardProps {
   onComment: () => void;
   onDelete: () => void;
   onOpenProfile: () => void;
+  onOpenMedia: () => void;
   isOwner: boolean;
   timeLabel: string;
 }
 
-function PostCard({ post, locale, onLike, onComment, onDelete, onOpenProfile, isOwner, timeLabel }: PostCardProps) {
+function PostCard({ post, onLike, onComment, onDelete, onOpenProfile, onOpenMedia, isOwner, timeLabel }: PostCardProps) {
   return (
     <article className="card p-4 animate-slide-up">
       <div className="flex items-start gap-3">
@@ -323,7 +436,13 @@ function PostCard({ post, locale, onLike, onComment, onDelete, onOpenProfile, is
         </div>
       </div>
 
-      <p className="text-sm text-slate-100 mt-3 whitespace-pre-wrap break-words leading-relaxed">{post.body}</p>
+      {post.body && (
+        <p className="text-sm text-slate-100 mt-3 whitespace-pre-wrap break-words leading-relaxed">{post.body}</p>
+      )}
+
+      {post.media_url && (
+        <PostMedia url={post.media_url} type={post.media_type === 'video' ? 'video' : 'image'} onOpen={onOpenMedia} />
+      )}
 
       <div className="flex items-center gap-1 mt-3 -mx-1">
         <button

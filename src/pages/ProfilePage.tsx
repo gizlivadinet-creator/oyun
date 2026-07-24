@@ -8,6 +8,8 @@ import { BadgeChip } from '@/components/BadgeChip';
 import { Spinner } from '@/components/Spinner';
 import { Modal } from '@/components/Modal';
 import { toast } from '@/components/Toast';
+import { PostMedia } from '@/components/PostMedia';
+import { Lightbox, type LightboxItem } from '@/components/Lightbox';
 import { cn, formatNumber } from '@/lib/utils';
 import {
   fetchProfile, fetchUserPosts, fetchUserBadges, fetchFollowCounts,
@@ -43,6 +45,7 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [lightbox, setLightbox] = useState<LightboxItem | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
@@ -301,7 +304,14 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
           <div className="space-y-3">
             {posts.map((post) => (
               <div key={post.id} className="card p-3">
-                <p className="text-sm text-slate-100 whitespace-pre-wrap break-words">{post.body}</p>
+                {post.body && <p className="text-sm text-slate-100 whitespace-pre-wrap break-words">{post.body}</p>}
+                {post.media_url && (
+                  <PostMedia
+                    url={post.media_url}
+                    type={post.media_type === 'video' ? 'video' : 'image'}
+                    onOpen={() => setLightbox({ url: post.media_url!, type: post.media_type === 'video' ? 'video' : 'image' })}
+                  />
+                )}
                 <div className="flex items-center justify-between mt-2">
                   <p className="text-[10px] text-slate-500">{timeAgo(post.created_at, locale)}</p>
                   <div className="flex items-center gap-2">
@@ -328,8 +338,22 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
       </div>
 
       {/* Edit modal */}
-      <Modal open={editing} onClose={() => setEditing(false)} title={t('profile.edit')}>
-        <div className="space-y-4">
+      <Modal
+        open={editing}
+        onClose={() => setEditing(false)}
+        title={t('profile.edit')}
+        footer={
+          <div className="flex gap-2">
+            <button onClick={() => setEditing(false)} className="btn-secondary flex-1">
+              <X className="h-4 w-4" /> {t('profile.cancel')}
+            </button>
+            <button onClick={saveEdit} disabled={saving || uploadingAvatar || uploadingCover} className="btn-primary flex-1">
+              {saving ? <Spinner size="sm" /> : <><Save className="h-4 w-4" /> {t('profile.save')}</>}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4 pb-1">
           {/* Cover photo */}
           <div>
             <label className="label">{t('profile.changeCover')}</label>
@@ -385,16 +409,10 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
             <label className="label">{t('profile.country')}</label>
             <input className="input" value={editCountry} onChange={(e) => setEditCountry(e.target.value)} maxLength={40} />
           </div>
-          <div className="flex gap-2 pt-2">
-            <button onClick={() => setEditing(false)} className="btn-secondary flex-1">
-              <X className="h-4 w-4" /> {t('profile.cancel')}
-            </button>
-            <button onClick={saveEdit} disabled={saving || uploadingAvatar || uploadingCover} className="btn-primary flex-1">
-              {saving ? <Spinner size="sm" /> : <><Save className="h-4 w-4" /> {t('profile.save')}</>}
-            </button>
-          </div>
         </div>
       </Modal>
+
+      <Lightbox item={lightbox} onClose={() => setLightbox(null)} />
     </div>
   );
 }
