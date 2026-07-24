@@ -1,5 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Heart, MessageCircle, Trash2, Send, Plus, Loader2, Image as ImageIcon, Video, X, Link2, Check } from 'lucide-react';
+import {
+  Heart, MessageCircle, Trash2, Send, Plus, Loader2, Image as ImageIcon, Video, X, Link2, Check,
+  Repeat2, BarChart3, Bookmark, Share as ShareIcon,
+} from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { Avatar } from '@/components/Avatar';
@@ -12,6 +15,7 @@ import { cn, timeAgo, formatNumber } from '@/lib/utils';
 import { parseMediaUrl, PROVIDER_LABEL, resolveMediaType, type ParsedMedia } from '@/lib/mediaEmbed';
 import {
   fetchFeed, fetchLikedIds, createPost, deletePost, toggleLike,
+  fetchRepostedIds, toggleRepost, fetchBookmarkedIds, toggleBookmark, incrementPostView,
   fetchComments, createComment, uploadPostMedia,
 } from '@/lib/services';
 import { runGamificationInBackground } from '@/lib/missions';
@@ -59,11 +63,18 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
     try {
       const { posts: fetched, hasMore: more } = await fetchFeed(p);
       if (!profile) return;
-      const likedIds = await fetchLikedIds(
-        fetched.map((x) => x.id),
-        profile.id,
-      );
-      const enriched = fetched.map((p) => ({ ...p, liked_by_me: likedIds.has(p.id) }));
+      const ids = fetched.map((x) => x.id);
+      const [likedIds, repostedIds, bookmarkedIds] = await Promise.all([
+        fetchLikedIds(ids, profile.id),
+        fetchRepostedIds(ids, profile.id),
+        fetchBookmarkedIds(ids, profile.id),
+      ]);
+      const enriched = fetched.map((p) => ({
+        ...p,
+        liked_by_me: likedIds.has(p.id),
+        reposted_by_me: repostedIds.has(p.id),
+        bookmarked_by_me: bookmarkedIds.has(p.id),
+      }));
       setPosts((prev) => (replace ? enriched : [...prev, ...enriched]));
       setHasMore(more);
       setPage(p);
@@ -162,6 +173,8 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
       const newPost = await createPost(body, user.id, media);
       newPost.author = profile;
       newPost.liked_by_me = false;
+      newPost.reposted_by_me = false;
+      newPost.bookmarked_by_me = false;
       setPosts((prev) => [newPost, ...prev]);
       setComposing('');
       clearMedia();
@@ -202,6 +215,101 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
       console.error(err);
     }
   };
+
+  const handleRepost = async (post: Post) => {
+    if (!user) return;
+    const reposted = !!post.reposted_by_me;
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === post.id
+          ? { ...p, reposted_by_me: !reposted, repost_count: p.repost_count + (reposted ? -1 : 1) }
+          : p,
+      ),
+    );
+    try {
+      await toggleRepost(post.id, user.id, reposted);
+      if (!reposted) toast(t('feed.reposted'), 'success');
+    } catch (err) {
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === post.id
+            ? { ...p, reposted_by_me: reposted, repost_count: p.repost_count + (reposted ? 1 : -1) }
+            : p,
+        ),
+      );
+      toast(t('common.error'), 'error');
+      console.error(err);
+    }
+  };
+
+  const handleBookmark = async (post: Post) => {
+    if (!user) return;
+    const bookmarked = !!post.bookmarked_by_me;
+    setPosts((prev) =>
+      prev.map((p) => (p.id === post.id ? { ...p, bookmarked_by_me: !bookmarked } : p)),
+    );
+    try {
+      await toggleBookmark(post.id, user.id, bookmarked);
+      toast(t(bookmarked ? 'feed.unbookmark' : 'feed.bookmarked'), 'success');
+    } catch (err) {
+      setPosts((prev) =>
+        prev.map((p) => (p.id === post.id ? { ...p, bookmarked_by_me: bookmarked } : p)),
+      );
+      toast(t('common.error'), 'error');
+      console.error(err);
+    }
+  };
+
+  const handleShare = async (post: Post) => {
+    const url = `${window.location.origin}${window.location.pathname}#/post/${post.id}`;
+    const shareData = { title: t('app.name'), text: post.body || t('app.name'), url };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+    } catch {
+      // User cancelled the native share sheet — fall through silently,
+      // this isn't an error worth surfacing.
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast(t('feed.linkCopied'), 'success');
+    } catch {
+      toast(t('common.error'), 'error');
+    }
+  };
+
+  // Impression counting: each post only bumps the view counter once per
+  // browser session, mirroring how X counts a viewer seeing a tweet once
+  // per session rather than on every re-render/scroll-past.
+  const viewedRef = useRef<Set<string>>(new Set());
+  const markViewed = useCallback((postId: string) => {
+    if (viewedRef.current.has(postId)) return;
+    let seen: string[] = [];
+    try {
+      seen = JSON.parse(sessionStorage.getItem('viewed_posts') || '[]');
+    } catch {
+      seen = [];
+    }
+    if (seen.includes(postId)) {
+      viewedRef.current.add(postId);
+      return;
+    }
+    viewedRef.current.add(postId);
+    seen.push(postId);
+    try {
+      sessionStorage.setItem('viewed_posts', JSON.stringify(seen));
+    } catch {
+      // sessionStorage unavailable (private mode etc.) — view just won't
+      // be deduped across reloads, which is a harmless degradation.
+    }
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, view_count: p.view_count + 1 } : p)),
+    );
+    incrementPostView(postId).catch(() => {});
+  }, []);
 
   const handleDelete = async (post: Post) => {
     if (!user || post.user_id !== user.id) return;
@@ -436,10 +544,14 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
             post={post}
             locale={locale}
             onLike={() => handleLike(post)}
+            onRepost={() => handleRepost(post)}
+            onBookmark={() => handleBookmark(post)}
+            onShare={() => handleShare(post)}
             onComment={() => openComments(post)}
             onDelete={() => handleDelete(post)}
             onOpenProfile={() => onOpenProfile(post.user_id)}
             onOpenMedia={() => post.media_url && setLightbox({ url: post.media_url, type: resolveMediaType(post.media_type) })}
+            onView={() => markViewed(post.id)}
             isOwner={post.user_id === user?.id}
             timeLabel={timeAgo(post.created_at, locale)}
           />
@@ -516,17 +628,44 @@ interface PostCardProps {
   post: Post;
   locale: 'tr' | 'en';
   onLike: () => void;
+  onRepost: () => void;
+  onBookmark: () => void;
+  onShare: () => void;
   onComment: () => void;
   onDelete: () => void;
   onOpenProfile: () => void;
   onOpenMedia: () => void;
+  onView: () => void;
   isOwner: boolean;
   timeLabel: string;
 }
 
-function PostCard({ post, onLike, onComment, onDelete, onOpenProfile, onOpenMedia, isOwner, timeLabel }: PostCardProps) {
+function PostCard({
+  post, onLike, onRepost, onBookmark, onShare, onComment, onDelete, onOpenProfile, onOpenMedia, onView, isOwner, timeLabel,
+}: PostCardProps) {
+  const articleRef = useRef<HTMLElement>(null);
+
+  // X/Twitter yalnızca bir gönderi gerçekten görünüme girdiğinde
+  // "görüntülenme" sayısını artırır — mount anında değil.
+  useEffect(() => {
+    const el = articleRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          onView();
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.5 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post.id]);
+
   return (
-    <article className="card p-4 animate-slide-up">
+    <article ref={articleRef} className="card p-4 animate-slide-up">
       <div className="flex items-start gap-3">
         <button onClick={onOpenProfile} className="shrink-0">
           <Avatar id={post.user_id} name={post.author?.display_name ?? ''} url={post.author?.avatar_url} size="md" />
@@ -557,24 +696,61 @@ function PostCard({ post, onLike, onComment, onDelete, onOpenProfile, onOpenMedi
         <PostMedia url={post.media_url} type={resolveMediaType(post.media_type)} onOpen={onOpenMedia} />
       )}
 
-      <div className="flex items-center gap-1 mt-3 -mx-1">
+      {/* Eylem çubuğu — X/Twitter ile birebir aynı sıra: yorum, repost,
+          beğeni, görüntülenme (pasif istatistik), kaydet + paylaş. */}
+      <div className="flex items-center justify-between mt-3 -mx-1">
+        <button
+          onClick={onComment}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 transition-all active:scale-90"
+        >
+          <MessageCircle className="h-4 w-4" />
+          {formatNumber(post.comment_count)}
+        </button>
+
+        <button
+          onClick={onRepost}
+          className={cn(
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-90',
+            post.reposted_by_me ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10',
+          )}
+        >
+          <Repeat2 className="h-4 w-4" />
+          {formatNumber(post.repost_count)}
+        </button>
+
         <button
           onClick={onLike}
           className={cn(
             'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-90',
-            post.liked_by_me ? 'text-rose-400 bg-rose-500/10' : 'text-slate-400 hover:bg-black/5',
+            post.liked_by_me ? 'text-rose-400 bg-rose-500/10' : 'text-slate-400 hover:text-rose-400 hover:bg-rose-500/10',
           )}
         >
           <Heart className={cn('h-4 w-4 transition-transform', post.liked_by_me && 'fill-rose-400 scale-110')} />
           {formatNumber(post.like_count)}
         </button>
-        <button
-          onClick={onComment}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:bg-black/5 transition-all active:scale-90"
-        >
-          <MessageCircle className="h-4 w-4" />
-          {formatNumber(post.comment_count)}
-        </button>
+
+        <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400">
+          <BarChart3 className="h-4 w-4" />
+          {formatNumber(post.view_count)}
+        </span>
+
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={onBookmark}
+            className={cn(
+              'p-1.5 rounded-lg transition-all active:scale-90',
+              post.bookmarked_by_me ? 'text-sky-400 bg-sky-500/10' : 'text-slate-400 hover:text-sky-400 hover:bg-sky-500/10',
+            )}
+          >
+            <Bookmark className={cn('h-4 w-4', post.bookmarked_by_me && 'fill-sky-400')} />
+          </button>
+          <button
+            onClick={onShare}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 transition-all active:scale-90"
+          >
+            <ShareIcon className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </article>
   );
