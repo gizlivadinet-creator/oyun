@@ -7,10 +7,10 @@
       // GitHub Pages sunucu tarafı yönlendirme yapmadığı için, bilinmeyen bir
       // path'e doğrudan girildiğinde (veya sayfa yenilendiğinde) GH Pages bu
       // 404.html dosyasını sunar. Burada gerçek path'i query string içine
-      // kodlayıp base path olan /oyun/ köküne yönlendiriyoruz; index.html
-      // içindeki script bunu geri çözüp History API ile gerçek path'e geçiyor.
+      // kodlayıp kök path'e yönlendiriyoruz; index.html içindeki script bunu
+      // geri çözüp History API ile gerçek path'e geçiyor.
       // Bkz: https://github.com/rafgraph/spa-github-pages
-      var pathSegmentsToKeep = 1; // '/oyun' -> 1 segment saklanır
+      var pathSegmentsToKeep = 0; // custom domain kökünde yayınlandığı için 0
 
       var l = window.location;
       l.replace(
