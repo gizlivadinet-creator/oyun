@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, ZoomIn, ZoomOut, Download } from 'lucide-react';
+import { parseMediaUrl } from '@/lib/mediaEmbed';
 
 export interface LightboxItem {
   url: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'embed';
 }
 
 interface LightboxProps {
@@ -63,7 +64,9 @@ export function Lightbox({ item, onClose }: LightboxProps) {
       <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={onClose} />
 
       <div className="relative z-10 w-full h-full flex items-center justify-center p-4 safe-top safe-bottom">
-        {item.type === 'image' ? (
+        {item.type === 'embed' ? (
+          <EmbedFrame url={item.url} />
+        ) : item.type === 'image' ? (
           <img
             src={item.url}
             alt=""
@@ -105,17 +108,30 @@ export function Lightbox({ item, onClose }: LightboxProps) {
             {zoomed ? <ZoomOut className="h-5 w-5" /> : <ZoomIn className="h-5 w-5" />}
           </button>
         )}
-        <a
-          href={item.url}
-          download
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="rounded-full bg-black/50 p-2.5 text-white hover:bg-black/70 transition-colors backdrop-blur-sm"
-          aria-label="İndir"
-        >
-          <Download className="h-5 w-5" />
-        </a>
+        {item.type !== 'embed' && (
+          <a
+            href={item.url}
+            download
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-full bg-black/50 p-2.5 text-white hover:bg-black/70 transition-colors backdrop-blur-sm"
+            aria-label="İndir"
+          >
+            <Download className="h-5 w-5" />
+          </a>
+        )}
+        {item.type === 'embed' && (
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-full bg-black/50 px-3 py-2.5 text-xs font-semibold text-white hover:bg-black/70 transition-colors backdrop-blur-sm"
+          >
+            Kaynakta aç
+          </a>
+        )}
         <button
           onClick={onClose}
           className="rounded-full bg-black/50 p-2.5 text-white hover:bg-black/70 transition-colors backdrop-blur-sm"
@@ -124,6 +140,28 @@ export function Lightbox({ item, onClose }: LightboxProps) {
           <X className="h-5 w-5" />
         </button>
       </div>
+    </div>
+  );
+}
+
+function EmbedFrame({ url }: { url: string }) {
+  const parsed = parseMediaUrl(url);
+  if (!parsed?.embedUrl) {
+    return <p className="text-sm text-slate-300">Bu içerik görüntülenemiyor.</p>;
+  }
+  return (
+    <div
+      className="relative w-full max-w-3xl aspect-video rounded-lg overflow-hidden bg-black"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <iframe
+        src={parsed.embedUrl}
+        title="embed"
+        className="absolute inset-0 h-full w-full"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+        sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
+      />
     </div>
   );
 }
