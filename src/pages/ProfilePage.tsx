@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Settings as SettingsIcon, Flame, Coins, Zap, Edit3, Save, X, MapPin } from 'lucide-react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { Settings as SettingsIcon, Flame, Coins, Zap, Edit3, Save, X, MapPin, Camera } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { Avatar } from '@/components/Avatar';
@@ -12,6 +12,7 @@ import { cn, formatNumber } from '@/lib/utils';
 import {
   fetchProfile, fetchUserPosts, fetchUserBadges, fetchFollowCounts,
   checkFollow, toggleFollow, updateProfile, fetchLikedIds, toggleLike,
+  uploadProfileImage,
 } from '@/lib/services';
 import { Heart, MessageCircle, Trash2 } from 'lucide-react';
 import { deletePost } from '@/lib/services';
@@ -37,7 +38,13 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
   const [editName, setEditName] = useState('');
   const [editBio, setEditBio] = useState('');
   const [editCountry, setEditCountry] = useState('');
+  const [editAvatarUrl, setEditAvatarUrl] = useState<string | null>(null);
+  const [editCoverUrl, setEditCoverUrl] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const [saving, setSaving] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   const isMe = profileId === me?.id;
 
@@ -93,7 +100,32 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
     setEditName(me.display_name);
     setEditBio(me.bio);
     setEditCountry(me.country);
+    setEditAvatarUrl(me.avatar_url);
+    setEditCoverUrl(me.cover_url);
     setEditing(true);
+  };
+
+  const handleImageSelect = async (file: File | undefined, kind: 'avatar' | 'cover') => {
+    if (!file || !me) return;
+    if (!file.type.startsWith('image/')) {
+      toast(t('profile.invalidImage'), 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast(t('profile.imageTooLarge'), 'error');
+      return;
+    }
+    const setUploading = kind === 'avatar' ? setUploadingAvatar : setUploadingCover;
+    const setUrl = kind === 'avatar' ? setEditAvatarUrl : setEditCoverUrl;
+    setUploading(true);
+    try {
+      const url = await uploadProfileImage(me.id, file, kind);
+      setUrl(url);
+    } catch {
+      toast(t('common.error'), 'error');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const saveEdit = async () => {
@@ -104,6 +136,8 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
         display_name: editName.trim(),
         bio: editBio.trim(),
         country: editCountry.trim(),
+        avatar_url: editAvatarUrl,
+        cover_url: editCoverUrl,
       });
       await refreshProfile();
       await load();
@@ -160,7 +194,10 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
     <div className="space-y-4 animate-fade-in">
       {/* Header card */}
       <div className="card overflow-hidden">
-        <div className="h-24 gradient-emerald relative">
+        <div
+          className="h-24 gradient-emerald relative bg-cover bg-center"
+          style={target.cover_url ? { backgroundImage: `url(${target.cover_url})` } : undefined}
+        >
           {target.is_premium && (
             <span className="absolute top-3 right-3 chip gradient-gold text-slate-950 text-[10px]">
               ★ Premium
@@ -292,7 +329,50 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
 
       {/* Edit modal */}
       <Modal open={editing} onClose={() => setEditing(false)} title={t('profile.edit')}>
-        <div className="space-y-3">
+        <div className="space-y-4">
+          {/* Cover photo */}
+          <div>
+            <label className="label">{t('profile.changeCover')}</label>
+            <button
+              type="button"
+              onClick={() => coverInputRef.current?.click()}
+              className="relative w-full h-20 rounded-xl overflow-hidden gradient-emerald bg-cover bg-center group"
+              style={editCoverUrl ? { backgroundImage: `url(${editCoverUrl})` } : undefined}
+            >
+              <div className="absolute inset-0 bg-black/30 flex items-center justify-center group-active:bg-black/40">
+                {uploadingCover ? <Spinner size="sm" /> : <Camera className="h-5 w-5 text-white" />}
+              </div>
+            </button>
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleImageSelect(e.target.files?.[0], 'cover')}
+            />
+          </div>
+
+          {/* Avatar */}
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              className="relative"
+            >
+              <Avatar id={me?.id ?? ''} name={editName || me?.display_name || ''} url={editAvatarUrl} size="xl" ring />
+              <div className="absolute inset-0 rounded-full bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                {uploadingAvatar ? <Spinner size="sm" /> : <Camera className="h-5 w-5 text-white" />}
+              </div>
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleImageSelect(e.target.files?.[0], 'avatar')}
+            />
+          </div>
+
           <div>
             <label className="label">{t('profile.displayName')}</label>
             <input className="input" value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={30} />
@@ -309,7 +389,7 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
             <button onClick={() => setEditing(false)} className="btn-secondary flex-1">
               <X className="h-4 w-4" /> {t('profile.cancel')}
             </button>
-            <button onClick={saveEdit} disabled={saving} className="btn-primary flex-1">
+            <button onClick={saveEdit} disabled={saving || uploadingAvatar || uploadingCover} className="btn-primary flex-1">
               {saving ? <Spinner size="sm" /> : <><Save className="h-4 w-4" /> {t('profile.save')}</>}
             </button>
           </div>
