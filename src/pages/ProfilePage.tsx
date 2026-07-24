@@ -13,9 +13,9 @@ import { Lightbox, type LightboxItem } from '@/components/Lightbox';
 import { cn, formatNumber } from '@/lib/utils';
 import { resolveMediaType } from '@/lib/mediaEmbed';
 import {
-  fetchProfile, fetchUserPosts, fetchUserBadges, fetchFollowCounts,
+  fetchUserPosts, fetchUserBadges, fetchFollowCounts,
   checkFollow, toggleFollow, updateProfile, fetchLikedIds, toggleLike,
-  uploadProfileImage,
+  uploadProfileImage, resolveProfileByHandle,
 } from '@/lib/services';
 import { Heart, MessageCircle, Trash2 } from 'lucide-react';
 import { deletePost } from '@/lib/services';
@@ -50,37 +50,45 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
-  const isMe = profileId === me?.id;
+  const isMe = target ? target.id === me?.id : profileId === me?.id;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, userPosts, userBadges, fCounts] = await Promise.all([
-        fetchProfile(profileId),
-        fetchUserPosts(profileId),
-        fetchUserBadges(profileId),
-        fetchFollowCounts(profileId),
+      // profileId burada bir handle'dır: gerçek id ya da username olabilir (/u/:handle rotası).
+      const p = await resolveProfileByHandle(profileId);
+      if (!p) {
+        setTarget(null);
+        setPosts([]);
+        setBadges([]);
+        setFollows({ followers: 0, following: 0 });
+        return;
+      }
+      const [userPosts, userBadges, fCounts] = await Promise.all([
+        fetchUserPosts(p.id),
+        fetchUserBadges(p.id),
+        fetchFollowCounts(p.id),
       ]);
       setTarget(p);
       setPosts(userPosts);
       setBadges(userBadges);
       setFollows(fCounts);
-      if (me && !isMe) {
-        checkFollow(me.id, profileId).then(setIsFollowing).catch(() => {});
+      if (me && p.id !== me.id) {
+        checkFollow(me.id, p.id).then(setIsFollowing).catch(() => {});
       }
     } catch {
       toast(t('common.error'), 'error');
     } finally {
       setLoading(false);
     }
-  }, [profileId, me, isMe, t]);
+  }, [profileId, me, t]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   const handleFollow = async () => {
-    if (!me) return;
+    if (!me || !target) return;
     const wasFollowing = isFollowing;
     setIsFollowing(!wasFollowing);
     setFollows((prev) => ({
@@ -88,7 +96,7 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
       followers: prev.followers + (wasFollowing ? -1 : 1),
     }));
     try {
-      await toggleFollow(me.id, profileId, wasFollowing);
+      await toggleFollow(me.id, target.id, wasFollowing);
     } catch {
       setIsFollowing(wasFollowing);
       setFollows((prev) => ({
@@ -203,7 +211,7 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
           style={target.cover_url ? { backgroundImage: `url(${target.cover_url})` } : undefined}
         >
           {target.is_premium && (
-            <span className="absolute top-3 right-3 chip gradient-gold text-slate-950 text-[10px]">
+            <span className="absolute top-3 right-3 chip gradient-gold text-amber-950 text-[10px]">
               ★ Premium
             </span>
           )}
@@ -227,7 +235,7 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
                 onClick={handleFollow}
                 className={cn(
                   'btn py-2 px-4 text-xs',
-                  isFollowing ? 'bg-white/5 text-slate-300 border border-white/10' : 'bg-emerald-500 text-slate-950',
+                  isFollowing ? 'bg-black/5 text-slate-300 border border-black/10' : 'bg-emerald-500 text-slate-950',
                 )}
               >
                 {isFollowing ? t('profile.unfollow') : t('profile.follow')}

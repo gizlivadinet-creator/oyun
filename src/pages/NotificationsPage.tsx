@@ -106,7 +106,7 @@ export function NotificationsPage({ onOpenProfile }: NotificationsPageProps) {
               key={n.id}
               onClick={() => n.actor_id && onOpenProfile(n.actor_id)}
               className={cn(
-                'card p-3 flex items-center gap-3 w-full text-left transition-all hover:bg-white/5',
+                'card p-3 flex items-center gap-3 w-full text-left transition-all hover:bg-black/5',
                 !n.read && 'ring-1 ring-emerald-500/30',
               )}
             >

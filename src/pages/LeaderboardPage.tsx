@@ -104,7 +104,7 @@ export function LeaderboardPage({ onOpenProfile }: LeaderboardPageProps) {
                   key={p.id}
                   onClick={() => onOpenProfile(p.id)}
                   className={cn(
-                    'card p-3 flex items-center gap-3 w-full text-left transition-all hover:bg-white/5',
+                    'card p-3 flex items-center gap-3 w-full text-left transition-all hover:bg-black/5',
                     isMe && 'ring-1 ring-emerald-500/40',
                   )}
                 >
@@ -139,7 +139,7 @@ interface PodiumItemProps {
 function PodiumItem({ rank, profile: p, isMe, height, youLabel, onClick }: PodiumItemProps) {
   const colors = {
     1: { bg: 'gradient-gold', Icon: Crown, iconColor: 'text-amber-300' },
-    2: { bg: 'bg-gradient-to-b from-slate-300 to-slate-500', Icon: Medal, iconColor: 'text-slate-200' },
+    2: { bg: 'bg-gradient-to-b from-zinc-300 to-zinc-500', Icon: Medal, iconColor: 'text-zinc-100' },
     3: { bg: 'bg-gradient-to-b from-amber-600 to-amber-800', Icon: Medal, iconColor: 'text-amber-300' },
   }[rank]!;
 
@@ -149,7 +149,7 @@ function PodiumItem({ rank, profile: p, isMe, height, youLabel, onClick }: Podiu
     <button onClick={onClick} className="flex flex-col items-center gap-1.5">
       <div className="relative">
         <Avatar id={p.id} name={p.display_name} url={p.avatar_url} size={rank === 1 ? 'lg' : 'md'} ring={isMe} />
-        <span className={cn('absolute -top-2 -left-2 h-6 w-6 rounded-full flex items-center justify-center text-slate-950', bg)}>
+        <span className={cn('absolute -top-2 -left-2 h-6 w-6 rounded-full flex items-center justify-center text-black/70', bg)}>
           <Icon className={cn('h-3.5 w-3.5', iconColor)} />
         </span>
       </div>
@@ -158,7 +158,7 @@ function PodiumItem({ rank, profile: p, isMe, height, youLabel, onClick }: Podiu
       </p>
       <p className="text-[10px] text-emerald-400 font-bold tabular-nums">{formatNumber(p.xp)}</p>
       <div className={cn('w-full rounded-t-lg flex items-center justify-center', height, bg)}>
-        <span className="text-lg font-black text-slate-950">{rank}</span>
+        <span className="text-lg font-black text-black/70">{rank}</span>
       </div>
     </button>
   );

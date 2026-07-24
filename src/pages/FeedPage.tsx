@@ -282,7 +282,7 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
             />
 
             {mediaPreview && (
-              <div className="relative mt-2 rounded-xl overflow-hidden border border-white/10 w-fit max-w-full">
+              <div className="relative mt-2 rounded-xl overflow-hidden border border-black/10 w-fit max-w-full">
                 {mediaKind === 'image' ? (
                   <img src={mediaPreview} alt="" className="max-h-48 object-cover" />
                 ) : (
@@ -300,7 +300,7 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
             )}
 
             {urlMedia && (
-              <div className="relative mt-2 rounded-xl overflow-hidden border border-white/10 max-w-full">
+              <div className="relative mt-2 rounded-xl overflow-hidden border border-black/10 max-w-full">
                 {urlMedia.type === 'image' ? (
                   <img src={urlMedia.url} alt="" className="max-h-48 w-full object-cover" />
                 ) : urlMedia.type === 'video' ? (
@@ -562,7 +562,7 @@ function PostCard({ post, onLike, onComment, onDelete, onOpenProfile, onOpenMedi
           onClick={onLike}
           className={cn(
             'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-90',
-            post.liked_by_me ? 'text-rose-400 bg-rose-500/10' : 'text-slate-400 hover:bg-white/5',
+            post.liked_by_me ? 'text-rose-400 bg-rose-500/10' : 'text-slate-400 hover:bg-black/5',
           )}
         >
           <Heart className={cn('h-4 w-4 transition-transform', post.liked_by_me && 'fill-rose-400 scale-110')} />
@@ -570,7 +570,7 @@ function PostCard({ post, onLike, onComment, onDelete, onOpenProfile, onOpenMedi
         </button>
         <button
           onClick={onComment}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:bg-white/5 transition-all active:scale-90"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:bg-black/5 transition-all active:scale-90"
         >
           <MessageCircle className="h-4 w-4" />
           {formatNumber(post.comment_count)}

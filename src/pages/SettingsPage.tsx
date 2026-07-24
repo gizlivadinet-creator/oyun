@@ -21,13 +21,13 @@ export function SettingsPage() {
           <p className="text-xs text-slate-400">Lv.{profile?.level} · {profile?.xp} XP</p>
         </div>
         {profile?.is_premium && (
-          <span className="chip gradient-gold text-slate-950 text-[10px]">★ Premium</span>
+          <span className="chip gradient-gold text-amber-950 text-[10px]">★ Premium</span>
         )}
       </div>
 
       {/* Language */}
       <section className="card overflow-hidden">
-        <div className="px-4 py-3 flex items-center gap-2 border-b border-white/5">
+        <div className="px-4 py-3 flex items-center gap-2 border-b border-black/5">
           <Globe className="h-4 w-4 text-emerald-400" />
           <h2 className="text-sm font-bold">{t('settings.language')}</h2>
         </div>
@@ -38,7 +38,7 @@ export function SettingsPage() {
               onClick={() => setLocale(l)}
               className={cn(
                 'flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm transition-all',
-                locale === l ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-300 hover:bg-white/5',
+                locale === l ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-300 hover:bg-black/5',
               )}
             >
               <span className="font-medium">{l === 'tr' ? t('settings.turkish') : t('settings.english')}</span>
@@ -50,7 +50,7 @@ export function SettingsPage() {
 
       {/* Premium */}
       <section className="card overflow-hidden">
-        <div className="px-4 py-3 flex items-center gap-2 border-b border-white/5">
+        <div className="px-4 py-3 flex items-center gap-2 border-b border-black/5">
           <Crown className="h-4 w-4 text-amber-400" />
           <h2 className="text-sm font-bold">{t('settings.premium')}</h2>
         </div>
@@ -58,7 +58,7 @@ export function SettingsPage() {
           {profile?.is_premium ? (
             <div className="flex items-center justify-between">
               <span className="text-sm text-emerald-400 font-semibold">{t('settings.active')}</span>
-              <span className="chip gradient-gold text-slate-950">★</span>
+              <span className="chip gradient-gold text-amber-950">★</span>
             </div>
           ) : (
             <div>
@@ -75,7 +75,7 @@ export function SettingsPage() {
 
       {/* About */}
       <section className="card overflow-hidden">
-        <div className="px-4 py-3 flex items-center gap-2 border-b border-white/5">
+        <div className="px-4 py-3 flex items-center gap-2 border-b border-black/5">
           <Info className="h-4 w-4 text-slate-400" />
           <h2 className="text-sm font-bold">{t('settings.about')}</h2>
         </div>
