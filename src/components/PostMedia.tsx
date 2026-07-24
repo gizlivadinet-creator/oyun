@@ -45,6 +45,7 @@ export function PostMedia({ url, type, onOpen }: PostMediaProps) {
     <button
       type="button"
       onClick={onOpen}
+      aria-label={type === 'image' ? 'Görseli büyüt' : 'Videoyu oynat'}
       className="relative mt-3 w-full overflow-hidden rounded-xl border border-white/5 bg-black/20 block group"
     >
       {type === 'image' ? (
