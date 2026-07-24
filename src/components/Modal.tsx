@@ -29,7 +29,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <div
         className={cn(
-          'relative w-full sm:max-w-md glass-strong rounded-t-3xl sm:rounded-3xl p-5 animate-slide-up safe-bottom',
+          'relative w-full sm:max-w-md glass-strong rounded-t-3xl sm:rounded-3xl p-5 animate-slide-up safe-bottom max-h-[88vh] overflow-y-auto',
           className,
         )}
         role="dialog"
