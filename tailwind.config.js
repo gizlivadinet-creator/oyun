@@ -16,7 +16,7 @@ export default {
         emerald: {
           // -> Claude's signature terracotta/clay accent (~#D97757)
           50: '#FAF3EE', 100: '#F3E1D6', 200: '#E8C4AE', 300: '#DBA482',
-          400: '#E08A62', 500: '#D97757', 600: '#C15F3C', 700: '#A14A2C',
+          400: '#BC5525', 500: '#D97757', 600: '#C15F3C', 700: '#A14A2C',
           800: '#7D3A23', 900: '#5C2B1A', 950: '#3A1B10',
         },
         slate: {
@@ -26,7 +26,7 @@ export default {
           // background) are now the lightest cream, low numbers (used for
           // primary text) are now the darkest ink. NEVER pure black/white.
           50: '#171310', 100: '#221E18', 200: '#332E26', 300: '#4A4438',
-          400: '#6B6355', 500: '#8A8172', 600: '#B8AF9C', 700: '#D6CFC0',
+          400: '#6B6355', 500: '#756E61', 600: '#635A47', 700: '#D6CFC0',
           800: '#E3DDD0', 900: '#EDE8DE', 950: '#F5F1EA',
         },
         primary: {
