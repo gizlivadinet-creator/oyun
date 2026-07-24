@@ -11,6 +11,7 @@ import { toast } from '@/components/Toast';
 import { PostMedia } from '@/components/PostMedia';
 import { Lightbox, type LightboxItem } from '@/components/Lightbox';
 import { cn, formatNumber } from '@/lib/utils';
+import { resolveMediaType } from '@/lib/mediaEmbed';
 import {
   fetchProfile, fetchUserPosts, fetchUserBadges, fetchFollowCounts,
   checkFollow, toggleFollow, updateProfile, fetchLikedIds, toggleLike,
@@ -308,8 +309,8 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
                 {post.media_url && (
                   <PostMedia
                     url={post.media_url}
-                    type={post.media_type === 'video' ? 'video' : 'image'}
-                    onOpen={() => setLightbox({ url: post.media_url!, type: post.media_type === 'video' ? 'video' : 'image' })}
+                    type={resolveMediaType(post.media_type)}
+                    onOpen={() => setLightbox({ url: post.media_url!, type: resolveMediaType(post.media_type) })}
                   />
                 )}
                 <div className="flex items-center justify-between mt-2">

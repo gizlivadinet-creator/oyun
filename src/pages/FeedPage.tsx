@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Heart, MessageCircle, Trash2, Send, Plus, Loader2, Image as ImageIcon, Video, X } from 'lucide-react';
+import { Heart, MessageCircle, Trash2, Send, Plus, Loader2, Image as ImageIcon, Video, X, Link2, Check } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { Avatar } from '@/components/Avatar';
@@ -9,6 +9,7 @@ import { toast } from '@/components/Toast';
 import { PostMedia } from '@/components/PostMedia';
 import { Lightbox, type LightboxItem } from '@/components/Lightbox';
 import { cn, timeAgo, formatNumber } from '@/lib/utils';
+import { parseMediaUrl, PROVIDER_LABEL, resolveMediaType, type ParsedMedia } from '@/lib/mediaEmbed';
 import {
   fetchFeed, fetchLikedIds, createPost, deletePost, toggleLike,
   fetchComments, createComment, uploadPostMedia,
@@ -40,12 +41,19 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
   const [sendingComment, setSendingComment] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxItem | null>(null);
 
-  // Composer attachment state
+  // Composer attachment state (file upload)
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
   const [mediaKind, setMediaKind] = useState<'image' | 'video' | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+
+  // Composer attachment state (URL-based image/video, incl. YouTube,
+  // Dailymotion, Vimeo, Facebook, Instagram, TikTok)
+  const [showUrlField, setShowUrlField] = useState(false);
+  const [urlDraft, setUrlDraft] = useState('');
+  const [urlMedia, setUrlMedia] = useState<ParsedMedia | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
 
   const load = useCallback(async (p: number, replace: boolean) => {
     try {
@@ -94,6 +102,11 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
       return;
     }
     if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+    // A post can only carry one attachment — picking a file clears any
+    // pending URL-based attachment.
+    setUrlMedia(null);
+    setUrlDraft('');
+    setUrlError(null);
     setMediaFile(file);
     setMediaKind(kind);
     setMediaPreview(URL.createObjectURL(file));
@@ -106,20 +119,45 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
     setMediaKind(null);
     if (imageInputRef.current) imageInputRef.current.value = '';
     if (videoInputRef.current) videoInputRef.current.value = '';
+    setUrlMedia(null);
+    setUrlDraft('');
+    setUrlError(null);
+    setShowUrlField(false);
+  };
+
+  const applyUrlMedia = () => {
+    const value = urlDraft.trim();
+    if (!value) return;
+    const parsed = parseMediaUrl(value);
+    if (!parsed) {
+      setUrlError(t('feed.invalidUrl'));
+      return;
+    }
+    setUrlError(null);
+    // A pasted URL replaces any file that was already picked.
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+    setMediaFile(null);
+    setMediaPreview(null);
+    setMediaKind(null);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+    if (videoInputRef.current) videoInputRef.current.value = '';
+    setUrlMedia(parsed);
   };
 
   const handlePost = async () => {
     const body = composing.trim();
-    if ((!body && !mediaFile) || !user || !profile) return;
+    if ((!body && !mediaFile && !urlMedia) || !user || !profile) return;
     if (body.length > 500) {
       toast(t('feed.tooLong'), 'error');
       return;
     }
     setPosting(true);
     try {
-      let media: { url: string; type: 'image' | 'video' } | null = null;
+      let media: { url: string; type: 'image' | 'video' | 'embed' } | null = null;
       if (mediaFile) {
         media = await uploadPostMedia(user.id, mediaFile);
+      } else if (urlMedia) {
+        media = { url: urlMedia.url, type: urlMedia.type };
       }
       const newPost = await createPost(body, user.id, media);
       newPost.author = profile;
@@ -261,12 +299,71 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
               </div>
             )}
 
+            {urlMedia && (
+              <div className="relative mt-2 rounded-xl overflow-hidden border border-white/10 max-w-full">
+                {urlMedia.type === 'image' ? (
+                  <img src={urlMedia.url} alt="" className="max-h-48 w-full object-cover" />
+                ) : urlMedia.type === 'video' ? (
+                  <video src={urlMedia.url} className="max-h-48 w-full" controls muted />
+                ) : (
+                  <div className="relative w-full aspect-video bg-black/40">
+                    <iframe
+                      src={urlMedia.embedUrl}
+                      title="preview"
+                      className="absolute inset-0 h-full w-full pointer-events-none"
+                      loading="lazy"
+                    />
+                  </div>
+                )}
+                {urlMedia.provider && (
+                  <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[9px] font-semibold text-white">
+                    {PROVIDER_LABEL[urlMedia.provider]}
+                  </span>
+                )}
+                <button
+                  onClick={clearMedia}
+                  type="button"
+                  className="absolute top-1.5 right-1.5 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80 transition-colors"
+                  aria-label={t('feed.removeMedia')}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+            {showUrlField && !mediaFile && !urlMedia && (
+              <div className="mt-2">
+                <div className="flex gap-1.5">
+                  <input
+                    type="url"
+                    inputMode="url"
+                    autoFocus
+                    className="input flex-1 py-2 text-xs"
+                    placeholder={t('feed.urlPlaceholder')}
+                    value={urlDraft}
+                    onChange={(e) => { setUrlDraft(e.target.value); setUrlError(null); }}
+                    onKeyDown={(e) => e.key === 'Enter' && applyUrlMedia()}
+                  />
+                  <button
+                    type="button"
+                    onClick={applyUrlMedia}
+                    disabled={!urlDraft.trim()}
+                    className="btn-primary px-3 py-2 text-xs shrink-0"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {urlError && <p className="text-[10px] text-rose-400 mt-1">{urlError}</p>}
+                <p className="text-[10px] text-slate-500 mt-1">{t('feed.urlHint')}</p>
+              </div>
+            )}
+
             <div className="flex items-center justify-between mt-2">
               <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => imageInputRef.current?.click()}
-                  disabled={posting}
+                  disabled={posting || !!urlMedia}
                   className="btn-ghost p-2 rounded-lg text-slate-400 hover:text-emerald-400"
                   aria-label={t('feed.addImage')}
                   title={t('feed.addImage')}
@@ -276,12 +373,28 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
                 <button
                   type="button"
                   onClick={() => videoInputRef.current?.click()}
-                  disabled={posting}
+                  disabled={posting || !!urlMedia}
                   className="btn-ghost p-2 rounded-lg text-slate-400 hover:text-emerald-400"
                   aria-label={t('feed.addVideo')}
                   title={t('feed.addVideo')}
                 >
                   <Video className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (mediaFile) return;
+                    setShowUrlField((v) => !v);
+                  }}
+                  disabled={posting || !!mediaFile}
+                  className={cn(
+                    'btn-ghost p-2 rounded-lg hover:text-emerald-400',
+                    showUrlField || urlMedia ? 'text-emerald-400' : 'text-slate-400',
+                  )}
+                  aria-label={t('feed.addUrl')}
+                  title={t('feed.addUrl')}
+                >
+                  <Link2 className="h-4 w-4" />
                 </button>
                 <input
                   ref={imageInputRef}
@@ -301,7 +414,7 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
               </div>
               <button
                 onClick={handlePost}
-                disabled={(!composing.trim() && !mediaFile) || posting}
+                disabled={(!composing.trim() && !mediaFile && !urlMedia) || posting}
                 className="btn-primary py-2 px-4 text-xs"
               >
                 {posting ? <Spinner size="sm" /> : <><Plus className="h-3.5 w-3.5" /> {t('feed.post')}</>}
@@ -326,7 +439,7 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
             onComment={() => openComments(post)}
             onDelete={() => handleDelete(post)}
             onOpenProfile={() => onOpenProfile(post.user_id)}
-            onOpenMedia={() => post.media_url && setLightbox({ url: post.media_url, type: post.media_type === 'video' ? 'video' : 'image' })}
+            onOpenMedia={() => post.media_url && setLightbox({ url: post.media_url, type: resolveMediaType(post.media_type) })}
             isOwner={post.user_id === user?.id}
             timeLabel={timeAgo(post.created_at, locale)}
           />
@@ -441,7 +554,7 @@ function PostCard({ post, onLike, onComment, onDelete, onOpenProfile, onOpenMedi
       )}
 
       {post.media_url && (
-        <PostMedia url={post.media_url} type={post.media_type === 'video' ? 'video' : 'image'} onOpen={onOpenMedia} />
+        <PostMedia url={post.media_url} type={resolveMediaType(post.media_type)} onOpen={onOpenMedia} />
       )}
 
       <div className="flex items-center gap-1 mt-3 -mx-1">
