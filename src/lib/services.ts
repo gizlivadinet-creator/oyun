@@ -88,6 +88,67 @@ export async function toggleLike(postId: string, userId: string, liked: boolean)
   }
 }
 
+export async function fetchRepostedIds(postIds: string[], userId: string): Promise<Set<string>> {
+  if (postIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from('reposts')
+    .select('post_id')
+    .eq('user_id', userId)
+    .in('post_id', postIds);
+  if (error) throw error;
+  return new Set((data ?? []).map((r) => r.post_id));
+}
+
+export async function toggleRepost(postId: string, userId: string, reposted: boolean): Promise<void> {
+  if (reposted) {
+    const { error } = await supabase
+      .from('reposts')
+      .delete()
+      .eq('post_id', postId)
+      .eq('user_id', userId);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('reposts')
+      .insert({ post_id: postId, user_id: userId });
+    if (error && error.code !== '23505') throw error;
+  }
+}
+
+export async function fetchBookmarkedIds(postIds: string[], userId: string): Promise<Set<string>> {
+  if (postIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from('bookmarks')
+    .select('post_id')
+    .eq('user_id', userId)
+    .in('post_id', postIds);
+  if (error) throw error;
+  return new Set((data ?? []).map((b) => b.post_id));
+}
+
+export async function toggleBookmark(postId: string, userId: string, bookmarked: boolean): Promise<void> {
+  if (bookmarked) {
+    const { error } = await supabase
+      .from('bookmarks')
+      .delete()
+      .eq('post_id', postId)
+      .eq('user_id', userId);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('bookmarks')
+      .insert({ post_id: postId, user_id: userId });
+    if (error && error.code !== '23505') throw error;
+  }
+}
+
+export async function incrementPostView(postId: string): Promise<void> {
+  // Best-effort impression counter — failures are swallowed so a stray
+  // network hiccup never surfaces to the user or blocks rendering.
+  const { error } = await supabase.rpc('increment_post_view', { target_post_id: postId });
+  if (error) console.error(error);
+}
+
 export async function fetchComments(postId: string): Promise<Array<{ id: string; body: string; created_at: string; user_id: string; author?: Profile }>> {
   const { data, error } = await supabase
     .from('comments')

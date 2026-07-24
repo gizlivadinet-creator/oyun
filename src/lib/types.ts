@@ -38,9 +38,13 @@ export interface Post {
   media_type: 'image' | 'video' | 'embed' | null;
   like_count: number;
   comment_count: number;
+  repost_count: number;
+  view_count: number;
   created_at: string;
   author?: Profile;
   liked_by_me?: boolean;
+  reposted_by_me?: boolean;
+  bookmarked_by_me?: boolean;
 }
 
 export interface Comment {
