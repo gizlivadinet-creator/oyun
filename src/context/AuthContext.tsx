@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from '@/lib/router';
 import type { Profile } from '@/lib/types';
 
 async function updateStreak(userId: string, lastLogin: string | null, currentStreak: number): Promise<void> {
@@ -25,6 +26,13 @@ interface AuthState {
   needsOnboarding: boolean;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * Guard for actions that require a signed-in user (like, comment, repost,
+   * bookmark, follow, posting, editing a profile...). Returns true when the
+   * caller already has a session; otherwise it sends the guest to the login
+   * screen and returns false so the caller can bail out of the handler.
+   */
+  requireAuth: () => boolean;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -99,8 +107,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsOnboarding(false);
   }, []);
 
+  const { navigate } = useRouter();
+  const requireAuth = useCallback(() => {
+    if (user) return true;
+    navigate('/auth/login');
+    return false;
+  }, [user, navigate]);
+
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, needsOnboarding, refreshProfile, signOut }}>
+    <AuthContext.Provider
+      value={{ session, user, profile, loading, needsOnboarding, refreshProfile, signOut, requireAuth }}
+    >
       {children}
     </AuthContext.Provider>
   );
