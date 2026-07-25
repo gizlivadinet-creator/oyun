@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Bell, Check, Heart, MessageSquare, UserPlus, Award, TrendingUp, Info } from 'lucide-react';
+import { Bell, Check, Heart, MessageSquare, UserPlus, Award, TrendingUp, Info, Repeat2, FileText } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { Avatar } from '@/components/Avatar';
 import { Spinner } from '@/components/Spinner';
 import { toast } from '@/components/Toast';
 import { cn, timeAgo } from '@/lib/utils';
-import { fetchNotifications, markAllNotificationsRead } from '@/lib/services';
+import { fetchNotifications, markAllNotificationsRead, subscribeToNotifications } from '@/lib/services';
 import type { NotificationType } from '@/lib/types';
 
 interface NotificationRow {
@@ -28,6 +28,8 @@ const TYPE_ICON: Record<string, typeof Heart> = {
   follow: UserPlus,
   like: Heart,
   comment: MessageSquare,
+  repost: Repeat2,
+  post: FileText,
   badge: Award,
   levelup: TrendingUp,
   system: Info,
@@ -37,6 +39,8 @@ const TYPE_COLOR: Record<string, string> = {
   follow: 'text-sky-400 bg-sky-500/10',
   like: 'text-rose-400 bg-rose-500/10',
   comment: 'text-emerald-400 bg-emerald-500/10',
+  repost: 'text-emerald-400 bg-emerald-500/10',
+  post: 'text-sky-400 bg-sky-500/10',
   badge: 'text-amber-400 bg-amber-500/10',
   levelup: 'text-violet-400 bg-violet-500/10',
   system: 'text-slate-400 bg-slate-500/10',
@@ -63,6 +67,16 @@ export function NotificationsPage({ onOpenProfile }: NotificationsPageProps) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Anlık bildirimler: Supabase Realtime üzerinden bu kullanıcıya ait
+  // notifications satırlarındaki her değişiklikte listeyi tazele — beğeni,
+  // yorum, takip, repost ve yeni gönderi bildirimleri sayfa yenilenmeden
+  // anında görünür.
+  useEffect(() => {
+    if (!profile) return;
+    const unsubscribe = subscribeToNotifications(profile.id, load);
+    return unsubscribe;
+  }, [profile, load]);
 
   const handleMarkAll = async () => {
     if (!profile) return;

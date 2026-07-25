@@ -15,17 +15,17 @@ interface LeaderboardPageProps {
 }
 
 export function LeaderboardPage({ onOpenProfile }: LeaderboardPageProps) {
-  const { profile } = useAuth();
+  const { profile, requireAuth } = useAuth();
   const { t } = useSettings();
   const [scope, setScope] = useState<Scope>('global');
   const [leaders, setLeaders] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!profile) return;
+    if (!profile && scope !== 'global') return;
     setLoading(true);
     try {
-      const result = await fetchLeaderboard(scope, profile.id);
+      const result = await fetchLeaderboard(scope, profile?.id ?? '');
       setLeaders(result);
     } catch {
       setLeaders([]);
@@ -61,7 +61,10 @@ export function LeaderboardPage({ onOpenProfile }: LeaderboardPageProps) {
           return (
             <button
               key={tab.id}
-              onClick={() => setScope(tab.id)}
+              onClick={() => {
+                if (tab.id !== 'global' && !requireAuth()) return;
+                setScope(tab.id);
+              }}
               className={cn(
                 'flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-lg transition-all',
                 scope === tab.id ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-slate-200',

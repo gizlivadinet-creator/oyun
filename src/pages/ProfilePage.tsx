@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Settings as SettingsIcon, Flame, Coins, Zap, Edit3, Save, X, MapPin, Camera } from 'lucide-react';
+import { Settings as SettingsIcon, Flame, Coins, Zap, Edit3, Save, X, MapPin, Camera, Repeat2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { Avatar } from '@/components/Avatar';
@@ -13,14 +13,15 @@ import { Lightbox, type LightboxItem } from '@/components/Lightbox';
 import { cn, formatNumber } from '@/lib/utils';
 import { resolveMediaType } from '@/lib/mediaEmbed';
 import {
-  fetchUserPosts, fetchUserBadges, fetchFollowCounts,
-  checkFollow, toggleFollow, updateProfile, fetchLikedIds, toggleLike,
+  fetchUserFeed, fetchUserBadges, fetchFollowCounts,
+  checkFollow, toggleFollow, updateProfile, fetchLikedIds, fetchRepostedIds, fetchBookmarkedIds,
+  toggleLike, toggleRepost, toggleBookmark,
   uploadProfileImage, resolveProfileByHandle,
 } from '@/lib/services';
-import { Heart, MessageCircle, Trash2 } from 'lucide-react';
+import { Heart, MessageCircle, Trash2, Bookmark } from 'lucide-react';
 import { deletePost } from '@/lib/services';
 import { timeAgo } from '@/lib/utils';
-import type { Profile, Post, Badge } from '@/lib/types';
+import type { Profile, Post, Badge, FeedItem } from '@/lib/types';
 
 interface ProfilePageProps {
   profileId: string;
@@ -29,10 +30,10 @@ interface ProfilePageProps {
 }
 
 export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
-  const { profile: me, user, refreshProfile } = useAuth();
+  const { profile: me, user, refreshProfile, requireAuth } = useAuth();
   const { t, locale } = useSettings();
   const [target, setTarget] = useState<Profile | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [items, setItems] = useState<FeedItem[]>([]);
   const [badges, setBadges] = useState<Badge[]>([]);
   const [follows, setFollows] = useState({ followers: 0, following: 0 });
   const [isFollowing, setIsFollowing] = useState(false);
@@ -59,18 +60,36 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
       const p = await resolveProfileByHandle(profileId);
       if (!p) {
         setTarget(null);
-        setPosts([]);
+        setItems([]);
         setBadges([]);
         setFollows({ followers: 0, following: 0 });
         return;
       }
-      const [userPosts, userBadges, fCounts] = await Promise.all([
-        fetchUserPosts(p.id),
+      const [{ items: fetchedItems }, userBadges, fCounts] = await Promise.all([
+        fetchUserFeed(p.id),
         fetchUserBadges(p.id),
         fetchFollowCounts(p.id),
       ]);
+      let enriched = fetchedItems;
+      if (me) {
+        const ids = Array.from(new Set(fetchedItems.map((it) => it.post.id)));
+        const [likedIds, repostedIds, bookmarkedIds] = await Promise.all([
+          fetchLikedIds(ids, me.id),
+          fetchRepostedIds(ids, me.id),
+          fetchBookmarkedIds(ids, me.id),
+        ]);
+        enriched = fetchedItems.map((it) => ({
+          ...it,
+          post: {
+            ...it.post,
+            liked_by_me: likedIds.has(it.post.id),
+            reposted_by_me: repostedIds.has(it.post.id),
+            bookmarked_by_me: bookmarkedIds.has(it.post.id),
+          },
+        }));
+      }
       setTarget(p);
-      setPosts(userPosts);
+      setItems(enriched);
       setBadges(userBadges);
       setFollows(fCounts);
       if (me && p.id !== me.id) {
@@ -87,8 +106,12 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
     load();
   }, [load]);
 
+  const updatePostEverywhere = useCallback((postId: string, updater: (p: Post) => Post) => {
+    setItems((prev) => prev.map((it) => (it.post.id === postId ? { ...it, post: updater(it.post) } : it)));
+  }, []);
+
   const handleFollow = async () => {
-    if (!me || !target) return;
+    if (!requireAuth() || !me || !target) return;
     const wasFollowing = isFollowing;
     setIsFollowing(!wasFollowing);
     setFollows((prev) => ({
@@ -108,7 +131,7 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
   };
 
   const openEdit = () => {
-    if (!me) return;
+    if (!requireAuth() || !me) return;
     setEditName(me.display_name);
     setEditBio(me.bio);
     setEditCountry(me.country);
@@ -166,7 +189,7 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
     if (!user) return;
     try {
       await deletePost(postId, user.id);
-      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      setItems((prev) => prev.filter((it) => it.post.id !== postId));
       toast(t('feed.delete'), 'success');
     } catch {
       toast(t('common.error'), 'error');
@@ -174,18 +197,48 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
   };
 
   const handleLike = async (post: Post) => {
-    if (!user) return;
+    if (!requireAuth() || !user) return;
     const liked = !!post.liked_by_me;
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === post.id
-          ? { ...p, liked_by_me: !liked, like_count: p.like_count + (liked ? -1 : 1) }
-          : p,
-      ),
-    );
+    updatePostEverywhere(post.id, (p) => ({ ...p, liked_by_me: !liked, like_count: p.like_count + (liked ? -1 : 1) }));
     try {
       await toggleLike(post.id, user.id, liked);
     } catch {
+      updatePostEverywhere(post.id, (p) => ({ ...p, liked_by_me: liked, like_count: p.like_count + (liked ? 1 : -1) }));
+      toast(t('common.error'), 'error');
+    }
+  };
+
+  const handleRepost = async (post: Post) => {
+    if (!requireAuth() || !user) return;
+    const reposted = !!post.reposted_by_me;
+    updatePostEverywhere(post.id, (p) => ({
+      ...p,
+      reposted_by_me: !reposted,
+      repost_count: p.repost_count + (reposted ? -1 : 1),
+    }));
+    try {
+      await toggleRepost(post.id, user.id, reposted);
+      if (!reposted) toast(t('feed.reposted'), 'success');
+      if (isMe) await load();
+    } catch {
+      updatePostEverywhere(post.id, (p) => ({
+        ...p,
+        reposted_by_me: reposted,
+        repost_count: p.repost_count + (reposted ? 1 : -1),
+      }));
+      toast(t('common.error'), 'error');
+    }
+  };
+
+  const handleBookmark = async (post: Post) => {
+    if (!requireAuth() || !user) return;
+    const bookmarked = !!post.bookmarked_by_me;
+    updatePostEverywhere(post.id, (p) => ({ ...p, bookmarked_by_me: !bookmarked }));
+    try {
+      await toggleBookmark(post.id, user.id, bookmarked);
+      toast(t(bookmarked ? 'feed.unbookmark' : 'feed.bookmarked'), 'success');
+    } catch {
+      updatePostEverywhere(post.id, (p) => ({ ...p, bookmarked_by_me: bookmarked }));
       toast(t('common.error'), 'error');
     }
   };
@@ -207,7 +260,7 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
       {/* Header card */}
       <div className="card overflow-hidden">
         <div
-          className="h-24 gradient-emerald relative bg-cover bg-center"
+          className="h-24 gradient-emerald relative bg-cover bg-center bg-no-repeat"
           style={target.cover_url ? { backgroundImage: `url(${target.cover_url})` } : undefined}
         >
           {target.is_premium && (
@@ -256,7 +309,7 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
 
           {/* Stats */}
           <div className="grid grid-cols-4 gap-2 mt-4">
-            <Stat label={t('profile.posts')} value={posts.length} />
+            <Stat label={t('profile.posts')} value={items.filter((it) => it.kind === 'post').length} />
             <Stat label={t('profile.followers')} value={follows.followers} />
             <Stat label={t('profile.following')} value={follows.following} />
             <Stat label={t('profile.level')} value={target.level} accent />
@@ -305,43 +358,76 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
       {/* Posts */}
       <div>
         <h2 className="text-sm font-bold mb-2 px-1">{t('profile.posts')}</h2>
-        {posts.length === 0 ? (
+        {items.length === 0 ? (
           <div className="card p-8 text-center">
             <p className="text-sm text-slate-500">{t('profile.noPosts')}</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {posts.map((post) => (
-              <div key={post.id} className="card p-3">
-                {post.body && <p className="text-sm text-slate-100 whitespace-pre-wrap break-words">{post.body}</p>}
-                {post.media_url && (
-                  <PostMedia
-                    url={post.media_url}
-                    type={resolveMediaType(post.media_type)}
-                    onOpen={() => setLightbox({ url: post.media_url!, type: resolveMediaType(post.media_type) })}
-                  />
-                )}
-                <div className="flex items-center justify-between mt-2">
-                  <p className="text-[10px] text-slate-500">{timeAgo(post.created_at, locale)}</p>
-                  <div className="flex items-center gap-2">
-                    <span className="flex items-center gap-1 text-xs text-slate-400">
-                      <Heart className="h-3.5 w-3.5" /> {formatNumber(post.like_count)}
-                    </span>
-                    <span className="flex items-center gap-1 text-xs text-slate-400">
-                      <MessageCircle className="h-3.5 w-3.5" /> {formatNumber(post.comment_count)}
-                    </span>
-                    {isMe && (
+            {items.map((item) => {
+              const post = item.post;
+              return (
+                <div key={item.key} className="card p-3">
+                  {item.kind === 'repost' && item.repostedBy && (
+                    <p className="flex items-center gap-1.5 mb-2 -mt-0.5 text-[11px] font-semibold text-slate-500">
+                      <Repeat2 className="h-3.5 w-3.5" />
+                      {item.repostedBy.id === me?.id ? t('feed.repostedByYou') : `${item.repostedBy.display_name} ${t('feed.repostedBy')}`}
+                    </p>
+                  )}
+                  {post.body && <p className="text-sm text-slate-100 whitespace-pre-wrap break-words">{post.body}</p>}
+                  {post.media_url && (
+                    <PostMedia
+                      url={post.media_url}
+                      type={resolveMediaType(post.media_type)}
+                      onOpen={() => setLightbox({ url: post.media_url!, type: resolveMediaType(post.media_type) })}
+                    />
+                  )}
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-[10px] text-slate-500">{timeAgo(post.created_at, locale)}</p>
+                    <div className="flex items-center gap-0.5">
+                      <span className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-xs text-slate-400">
+                        <MessageCircle className="h-3.5 w-3.5" /> {formatNumber(post.comment_count)}
+                      </span>
                       <button
-                        onClick={() => handleDeletePost(post.id)}
-                        className="text-slate-500 hover:text-rose-400 p-1"
+                        onClick={() => handleRepost(post)}
+                        className={cn(
+                          'flex items-center gap-1 px-1.5 py-1 rounded-lg text-xs transition-colors',
+                          post.reposted_by_me ? 'text-emerald-400' : 'text-slate-400 hover:text-emerald-400',
+                        )}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Repeat2 className="h-3.5 w-3.5" /> {formatNumber(post.repost_count)}
                       </button>
-                    )}
+                      <button
+                        onClick={() => handleLike(post)}
+                        className={cn(
+                          'flex items-center gap-1 px-1.5 py-1 rounded-lg text-xs transition-colors',
+                          post.liked_by_me ? 'text-rose-400' : 'text-slate-400 hover:text-rose-400',
+                        )}
+                      >
+                        <Heart className={cn('h-3.5 w-3.5', post.liked_by_me && 'fill-rose-400')} /> {formatNumber(post.like_count)}
+                      </button>
+                      <button
+                        onClick={() => handleBookmark(post)}
+                        className={cn(
+                          'p-1 rounded-lg transition-colors',
+                          post.bookmarked_by_me ? 'text-sky-400' : 'text-slate-400 hover:text-sky-400',
+                        )}
+                      >
+                        <Bookmark className={cn('h-3.5 w-3.5', post.bookmarked_by_me && 'fill-sky-400')} />
+                      </button>
+                      {isMe && item.kind === 'post' && (
+                        <button
+                          onClick={() => handleDeletePost(post.id)}
+                          className="text-slate-500 hover:text-rose-400 p-1"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -369,7 +455,7 @@ export function ProfilePage({ profileId, onOpenProfile }: ProfilePageProps) {
             <button
               type="button"
               onClick={() => coverInputRef.current?.click()}
-              className="relative w-full h-20 rounded-xl overflow-hidden gradient-emerald bg-cover bg-center group"
+              className="relative w-full h-20 rounded-xl overflow-hidden gradient-emerald bg-cover bg-center bg-no-repeat group"
               style={editCoverUrl ? { backgroundImage: `url(${editCoverUrl})` } : undefined}
             >
               <div className="absolute inset-0 bg-black/30 flex items-center justify-center group-active:bg-black/40">

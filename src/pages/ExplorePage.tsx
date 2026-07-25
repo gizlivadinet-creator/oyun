@@ -22,8 +22,7 @@ export function ExplorePage({ onOpenProfile }: ExplorePageProps) {
   const [loadingTrending, setLoadingTrending] = useState(true);
 
   useEffect(() => {
-    if (!profile) return;
-    fetchLeaderboard('global', profile.id, 10)
+    fetchLeaderboard('global', profile?.id ?? '', 10)
       .then(setTrending)
       .catch(() => {})
       .finally(() => setLoadingTrending(false));

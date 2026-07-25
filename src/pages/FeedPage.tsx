@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Heart, MessageCircle, Trash2, Send, Plus, Loader2, Image as ImageIcon, Video, X, Link2, Check,
-  Repeat2, BarChart3, Bookmark, Share as ShareIcon,
+  Repeat2, BarChart3, Bookmark, Share as ShareIcon, LogIn,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
@@ -19,7 +19,7 @@ import {
   fetchComments, createComment, uploadPostMedia,
 } from '@/lib/services';
 import { runGamificationInBackground } from '@/lib/missions';
-import type { Post, Comment } from '@/lib/types';
+import type { Post, Comment, FeedItem, Profile } from '@/lib/types';
 
 interface FeedPageProps {
   onOpenProfile: (id: string) => void;
@@ -29,9 +29,9 @@ const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 export function FeedPage({ onOpenProfile }: FeedPageProps) {
-  const { profile, user, refreshProfile } = useAuth();
+  const { profile, user, refreshProfile, requireAuth } = useAuth();
   const { t, locale } = useSettings();
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(0);
@@ -59,23 +59,36 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
   const [urlMedia, setUrlMedia] = useState<ParsedMedia | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
 
+  // Applies a per-post update everywhere that post appears in the timeline
+  // — the same post can show up both as an original entry and as one or
+  // more repost entries, and all of them must stay in sync (e.g. a like
+  // toggled from the "repost" copy must also update the "original" copy).
+  const updatePostEverywhere = useCallback((postId: string, updater: (p: Post) => Post) => {
+    setItems((prev) => prev.map((it) => (it.post.id === postId ? { ...it, post: updater(it.post) } : it)));
+  }, []);
+
   const load = useCallback(async (p: number, replace: boolean) => {
     try {
-      const { posts: fetched, hasMore: more } = await fetchFeed(p);
-      if (!profile) return;
-      const ids = fetched.map((x) => x.id);
-      const [likedIds, repostedIds, bookmarkedIds] = await Promise.all([
-        fetchLikedIds(ids, profile.id),
-        fetchRepostedIds(ids, profile.id),
-        fetchBookmarkedIds(ids, profile.id),
-      ]);
-      const enriched = fetched.map((p) => ({
-        ...p,
-        liked_by_me: likedIds.has(p.id),
-        reposted_by_me: repostedIds.has(p.id),
-        bookmarked_by_me: bookmarkedIds.has(p.id),
-      }));
-      setPosts((prev) => (replace ? enriched : [...prev, ...enriched]));
+      const { items: fetched, hasMore: more } = await fetchFeed(p);
+      let enriched = fetched;
+      if (profile) {
+        const ids = Array.from(new Set(fetched.map((it) => it.post.id)));
+        const [likedIds, repostedIds, bookmarkedIds] = await Promise.all([
+          fetchLikedIds(ids, profile.id),
+          fetchRepostedIds(ids, profile.id),
+          fetchBookmarkedIds(ids, profile.id),
+        ]);
+        enriched = fetched.map((it) => ({
+          ...it,
+          post: {
+            ...it.post,
+            liked_by_me: likedIds.has(it.post.id),
+            reposted_by_me: repostedIds.has(it.post.id),
+            bookmarked_by_me: bookmarkedIds.has(it.post.id),
+          },
+        }));
+      }
+      setItems((prev) => (replace ? enriched : [...prev, ...enriched]));
       setHasMore(more);
       setPage(p);
     } catch (err) {
@@ -89,7 +102,8 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
 
   useEffect(() => {
     load(0, true);
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
 
   useEffect(() => {
     return () => {
@@ -156,6 +170,7 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
   };
 
   const handlePost = async () => {
+    if (!requireAuth()) return;
     const body = composing.trim();
     if ((!body && !mediaFile && !urlMedia) || !user || !profile) return;
     if (body.length > 500) {
@@ -175,7 +190,14 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
       newPost.liked_by_me = false;
       newPost.reposted_by_me = false;
       newPost.bookmarked_by_me = false;
-      setPosts((prev) => [newPost, ...prev]);
+      const newItem: FeedItem = {
+        key: `${newPost.id}:post`,
+        activityAt: newPost.created_at,
+        kind: 'post',
+        repostedBy: null,
+        post: newPost,
+      };
+      setItems((prev) => [newItem, ...prev]);
       setComposing('');
       clearMedia();
       toast(`+10 XP`, 'success');
@@ -191,70 +213,70 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
   };
 
   const handleLike = async (post: Post) => {
-    if (!user) return;
+    if (!requireAuth() || !user) return;
     const liked = !!post.liked_by_me;
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === post.id
-          ? { ...p, liked_by_me: !liked, like_count: p.like_count + (liked ? -1 : 1) }
-          : p,
-      ),
-    );
+    updatePostEverywhere(post.id, (p) => ({ ...p, liked_by_me: !liked, like_count: p.like_count + (liked ? -1 : 1) }));
     try {
       await toggleLike(post.id, user.id, liked);
       runGamificationInBackground(user.id);
     } catch (err) {
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === post.id
-            ? { ...p, liked_by_me: liked, like_count: p.like_count + (liked ? 1 : -1) }
-            : p,
-        ),
-      );
+      updatePostEverywhere(post.id, (p) => ({ ...p, liked_by_me: liked, like_count: p.like_count + (liked ? 1 : -1) }));
       toast(t('common.error'), 'error');
       console.error(err);
     }
   };
 
   const handleRepost = async (post: Post) => {
-    if (!user) return;
+    if (!requireAuth() || !user) return;
     const reposted = !!post.reposted_by_me;
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === post.id
-          ? { ...p, reposted_by_me: !reposted, repost_count: p.repost_count + (reposted ? -1 : 1) }
-          : p,
-      ),
-    );
+    updatePostEverywhere(post.id, (p) => ({
+      ...p,
+      reposted_by_me: !reposted,
+      repost_count: p.repost_count + (reposted ? -1 : 1),
+    }));
     try {
       await toggleRepost(post.id, user.id, reposted);
-      if (!reposted) toast(t('feed.reposted'), 'success');
+      if (!reposted) {
+        toast(t('feed.reposted'), 'success');
+        // Immediately reflect the repost as a new timeline entry at the top
+        // (mirroring what a fresh feed load from the server would return)
+        // instead of waiting for the next full refresh.
+        setItems((prev) => {
+          const already = prev.some((it) => it.kind === 'repost' && it.post.id === post.id && it.repostedBy?.id === profile?.id);
+          if (already || !profile) return prev;
+          const source = prev.find((it) => it.post.id === post.id)?.post ?? post;
+          const repostItem: FeedItem = {
+            key: `${post.id}:repost:${Date.now()}`,
+            activityAt: new Date().toISOString(),
+            kind: 'repost',
+            repostedBy: profile,
+            post: { ...source, reposted_by_me: true, repost_count: source.repost_count + (reposted ? 0 : 1) },
+          };
+          return [repostItem, ...prev];
+        });
+      } else {
+        setItems((prev) => prev.filter((it) => !(it.kind === 'repost' && it.post.id === post.id && it.repostedBy?.id === profile?.id)));
+      }
     } catch (err) {
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === post.id
-            ? { ...p, reposted_by_me: reposted, repost_count: p.repost_count + (reposted ? 1 : -1) }
-            : p,
-        ),
-      );
+      updatePostEverywhere(post.id, (p) => ({
+        ...p,
+        reposted_by_me: reposted,
+        repost_count: p.repost_count + (reposted ? 1 : -1),
+      }));
       toast(t('common.error'), 'error');
       console.error(err);
     }
   };
 
   const handleBookmark = async (post: Post) => {
-    if (!user) return;
+    if (!requireAuth() || !user) return;
     const bookmarked = !!post.bookmarked_by_me;
-    setPosts((prev) =>
-      prev.map((p) => (p.id === post.id ? { ...p, bookmarked_by_me: !bookmarked } : p)),
-    );
+    updatePostEverywhere(post.id, (p) => ({ ...p, bookmarked_by_me: !bookmarked }));
     try {
       await toggleBookmark(post.id, user.id, bookmarked);
       toast(t(bookmarked ? 'feed.unbookmark' : 'feed.bookmarked'), 'success');
     } catch (err) {
-      setPosts((prev) =>
-        prev.map((p) => (p.id === post.id ? { ...p, bookmarked_by_me: bookmarked } : p)),
-      );
+      updatePostEverywhere(post.id, (p) => ({ ...p, bookmarked_by_me: bookmarked }));
       toast(t('common.error'), 'error');
       console.error(err);
     }
@@ -305,18 +327,16 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
       // sessionStorage unavailable (private mode etc.) — view just won't
       // be deduped across reloads, which is a harmless degradation.
     }
-    setPosts((prev) =>
-      prev.map((p) => (p.id === postId ? { ...p, view_count: p.view_count + 1 } : p)),
-    );
+    updatePostEverywhere(postId, (p) => ({ ...p, view_count: p.view_count + 1 }));
     incrementPostView(postId).catch(() => {});
-  }, []);
+  }, [updatePostEverywhere]);
 
   const handleDelete = async (post: Post) => {
     if (!user || post.user_id !== user.id) return;
     if (!confirm(t('feed.deleteConfirm'))) return;
     try {
       await deletePost(post.id, user.id);
-      setPosts((prev) => prev.filter((p) => p.id !== post.id));
+      setItems((prev) => prev.filter((it) => it.post.id !== post.id));
       toast(t('feed.delete'), 'success');
     } catch {
       toast(t('common.error'), 'error');
@@ -338,19 +358,16 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
   };
 
   const sendComment = async () => {
+    if (!requireAuth() || !user) return;
     const body = commentText.trim();
-    if (!body || !commentModal || !user) return;
+    if (!body || !commentModal) return;
     setSendingComment(true);
     try {
       await createComment(commentModal.id, body, user.id);
       const fetched = await fetchComments(commentModal.id);
       setComments(fetched as unknown as Comment[]);
       setCommentText('');
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === commentModal.id ? { ...p, comment_count: p.comment_count + 1 } : p,
-        ),
-      );
+      updatePostEverywhere(commentModal.id, (p) => ({ ...p, comment_count: p.comment_count + 1 }));
       toast(`+5 XP`, 'success');
       runGamificationInBackground(user.id, refreshProfile);
     } catch {
@@ -377,183 +394,201 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
   return (
     <div className="space-y-4">
       {/* Composer */}
-      <div className="card p-4 animate-slide-up">
-        <div className="flex gap-3">
-          <Avatar id={profile?.id ?? ''} name={profile?.display_name ?? ''} url={profile?.avatar_url} size="md" />
-          <div className="flex-1 min-w-0">
-            <textarea
-              className="input min-h-[60px] resize-none"
-              value={composing}
-              onChange={(e) => setComposing(e.target.value.slice(0, 500))}
-              placeholder={t('feed.createPlaceholder')}
-              maxLength={500}
-            />
+      {user && profile ? (
+        <div className="card p-4 animate-slide-up">
+          <div className="flex gap-3">
+            <Avatar id={profile?.id ?? ''} name={profile?.display_name ?? ''} url={profile?.avatar_url} size="md" />
+            <div className="flex-1 min-w-0">
+              <textarea
+                className="input min-h-[60px] resize-none"
+                value={composing}
+                onChange={(e) => setComposing(e.target.value.slice(0, 500))}
+                placeholder={t('feed.createPlaceholder')}
+                maxLength={500}
+              />
 
-            {mediaPreview && (
-              <div className="relative mt-2 rounded-xl overflow-hidden border border-black/10 w-fit max-w-full">
-                {mediaKind === 'image' ? (
-                  <img src={mediaPreview} alt="" className="max-h-48 object-cover" />
-                ) : (
-                  <video src={mediaPreview} className="max-h-48" controls muted />
-                )}
-                <button
-                  onClick={clearMedia}
-                  type="button"
-                  className="absolute top-1.5 right-1.5 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80 transition-colors"
-                  aria-label={t('feed.removeMedia')}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-
-            {urlMedia && (
-              <div className="relative mt-2 rounded-xl overflow-hidden border border-black/10 max-w-full">
-                {urlMedia.type === 'image' ? (
-                  <img src={urlMedia.url} alt="" className="max-h-48 w-full object-cover" />
-                ) : urlMedia.type === 'video' ? (
-                  <video src={urlMedia.url} className="max-h-48 w-full" controls muted />
-                ) : (
-                  <div className="relative w-full aspect-video bg-black/40">
-                    <iframe
-                      src={urlMedia.embedUrl}
-                      title="preview"
-                      className="absolute inset-0 h-full w-full pointer-events-none"
-                      loading="lazy"
-                    />
-                  </div>
-                )}
-                {urlMedia.provider && (
-                  <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[9px] font-semibold text-white">
-                    {PROVIDER_LABEL[urlMedia.provider]}
-                  </span>
-                )}
-                <button
-                  onClick={clearMedia}
-                  type="button"
-                  className="absolute top-1.5 right-1.5 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80 transition-colors"
-                  aria-label={t('feed.removeMedia')}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-
-            {showUrlField && !mediaFile && !urlMedia && (
-              <div className="mt-2">
-                <div className="flex gap-1.5">
-                  <input
-                    type="url"
-                    inputMode="url"
-                    autoFocus
-                    className="input flex-1 py-2 text-xs"
-                    placeholder={t('feed.urlPlaceholder')}
-                    value={urlDraft}
-                    onChange={(e) => { setUrlDraft(e.target.value); setUrlError(null); }}
-                    onKeyDown={(e) => e.key === 'Enter' && applyUrlMedia()}
-                  />
+              {mediaPreview && (
+                <div className="relative mt-2 rounded-xl overflow-hidden border border-black/10 w-fit max-w-full">
+                  {mediaKind === 'image' ? (
+                    <img src={mediaPreview} alt="" className="max-h-48 object-cover" />
+                  ) : (
+                    <video src={mediaPreview} className="max-h-48" controls muted />
+                  )}
                   <button
+                    onClick={clearMedia}
                     type="button"
-                    onClick={applyUrlMedia}
-                    disabled={!urlDraft.trim()}
-                    className="btn-primary px-3 py-2 text-xs shrink-0"
+                    className="absolute top-1.5 right-1.5 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80 transition-colors"
+                    aria-label={t('feed.removeMedia')}
                   >
-                    <Check className="h-3.5 w-3.5" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                {urlError && <p className="text-[10px] text-rose-400 mt-1">{urlError}</p>}
-                <p className="text-[10px] text-slate-500 mt-1">{t('feed.urlHint')}</p>
-              </div>
-            )}
+              )}
 
-            <div className="flex items-center justify-between mt-2">
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => imageInputRef.current?.click()}
-                  disabled={posting || !!urlMedia}
-                  className="btn-ghost p-2 rounded-lg text-slate-400 hover:text-emerald-400"
-                  aria-label={t('feed.addImage')}
-                  title={t('feed.addImage')}
-                >
-                  <ImageIcon className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => videoInputRef.current?.click()}
-                  disabled={posting || !!urlMedia}
-                  className="btn-ghost p-2 rounded-lg text-slate-400 hover:text-emerald-400"
-                  aria-label={t('feed.addVideo')}
-                  title={t('feed.addVideo')}
-                >
-                  <Video className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (mediaFile) return;
-                    setShowUrlField((v) => !v);
-                  }}
-                  disabled={posting || !!mediaFile}
-                  className={cn(
-                    'btn-ghost p-2 rounded-lg hover:text-emerald-400',
-                    showUrlField || urlMedia ? 'text-emerald-400' : 'text-slate-400',
+              {urlMedia && (
+                <div className="relative mt-2 rounded-xl overflow-hidden border border-black/10 max-w-full">
+                  {urlMedia.type === 'image' ? (
+                    <img src={urlMedia.url} alt="" className="max-h-48 w-full object-cover" />
+                  ) : urlMedia.type === 'video' ? (
+                    <video src={urlMedia.url} className="max-h-48 w-full" controls muted />
+                  ) : (
+                    <div className="relative w-full aspect-video bg-black/40">
+                      <iframe
+                        src={urlMedia.embedUrl}
+                        title="preview"
+                        className="absolute inset-0 h-full w-full pointer-events-none"
+                        loading="lazy"
+                      />
+                    </div>
                   )}
-                  aria-label={t('feed.addUrl')}
-                  title={t('feed.addUrl')}
+                  {urlMedia.provider && (
+                    <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[9px] font-semibold text-white">
+                      {PROVIDER_LABEL[urlMedia.provider]}
+                    </span>
+                  )}
+                  <button
+                    onClick={clearMedia}
+                    type="button"
+                    className="absolute top-1.5 right-1.5 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80 transition-colors"
+                    aria-label={t('feed.removeMedia')}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {showUrlField && !mediaFile && !urlMedia && (
+                <div className="mt-2">
+                  <div className="flex gap-1.5">
+                    <input
+                      type="url"
+                      inputMode="url"
+                      autoFocus
+                      className="input flex-1 py-2 text-xs"
+                      placeholder={t('feed.urlPlaceholder')}
+                      value={urlDraft}
+                      onChange={(e) => { setUrlDraft(e.target.value); setUrlError(null); }}
+                      onKeyDown={(e) => e.key === 'Enter' && applyUrlMedia()}
+                    />
+                    <button
+                      type="button"
+                      onClick={applyUrlMedia}
+                      disabled={!urlDraft.trim()}
+                      className="btn-primary px-3 py-2 text-xs shrink-0"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  {urlError && <p className="text-[10px] text-rose-400 mt-1">{urlError}</p>}
+                  <p className="text-[10px] text-slate-500 mt-1">{t('feed.urlHint')}</p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={posting || !!urlMedia}
+                    className="btn-ghost p-2 rounded-lg text-slate-400 hover:text-emerald-400"
+                    aria-label={t('feed.addImage')}
+                    title={t('feed.addImage')}
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => videoInputRef.current?.click()}
+                    disabled={posting || !!urlMedia}
+                    className="btn-ghost p-2 rounded-lg text-slate-400 hover:text-emerald-400"
+                    aria-label={t('feed.addVideo')}
+                    title={t('feed.addVideo')}
+                  >
+                    <Video className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (mediaFile) return;
+                      setShowUrlField((v) => !v);
+                    }}
+                    disabled={posting || !!mediaFile}
+                    className={cn(
+                      'btn-ghost p-2 rounded-lg hover:text-emerald-400',
+                      showUrlField || urlMedia ? 'text-emerald-400' : 'text-slate-400',
+                    )}
+                    aria-label={t('feed.addUrl')}
+                    title={t('feed.addUrl')}
+                  >
+                    <Link2 className="h-4 w-4" />
+                  </button>
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { pickMedia('image', e.target.files?.[0]); e.target.value = ''; }}
+                  />
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={(e) => { pickMedia('video', e.target.files?.[0]); e.target.value = ''; }}
+                  />
+                  <span className="text-[10px] text-slate-500 tabular-nums ml-1">{composing.length}/500</span>
+                </div>
+                <button
+                  onClick={handlePost}
+                  disabled={(!composing.trim() && !mediaFile && !urlMedia) || posting}
+                  className="btn-primary py-2 px-4 text-xs"
                 >
-                  <Link2 className="h-4 w-4" />
+                  {posting ? <Spinner size="sm" /> : <><Plus className="h-3.5 w-3.5" /> {t('feed.post')}</>}
                 </button>
-                <input
-                  ref={imageInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { pickMedia('image', e.target.files?.[0]); e.target.value = ''; }}
-                />
-                <input
-                  ref={videoInputRef}
-                  type="file"
-                  accept="video/*"
-                  className="hidden"
-                  onChange={(e) => { pickMedia('video', e.target.files?.[0]); e.target.value = ''; }}
-                />
-                <span className="text-[10px] text-slate-500 tabular-nums ml-1">{composing.length}/500</span>
               </div>
-              <button
-                onClick={handlePost}
-                disabled={(!composing.trim() && !mediaFile && !urlMedia) || posting}
-                className="btn-primary py-2 px-4 text-xs"
-              >
-                {posting ? <Spinner size="sm" /> : <><Plus className="h-3.5 w-3.5" /> {t('feed.post')}</>}
-              </button>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <button
+          onClick={() => requireAuth()}
+          className="card p-4 w-full flex items-center gap-3 text-left animate-slide-up hover:bg-black/5 transition-colors"
+        >
+          <div className="h-11 w-11 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
+            <LogIn className="h-5 w-5 text-emerald-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">{t('feed.signInToPost')}</p>
+            <p className="text-xs text-slate-500">{t('feed.createPlaceholder')}</p>
+          </div>
+          <span className="btn-primary py-1.5 px-3 text-xs shrink-0">{t('feed.signInCta')}</span>
+        </button>
+      )}
 
       {/* Posts */}
-      {posts.length === 0 ? (
+      {items.length === 0 ? (
         <div className="card p-10 text-center animate-fade-in">
           <p className="text-slate-400">{t('feed.empty')}</p>
         </div>
       ) : (
-        posts.map((post) => (
+        items.map((item) => (
           <PostCard
-            key={post.id}
-            post={post}
+            key={item.key}
+            post={item.post}
+            repostedBy={item.repostedBy}
             locale={locale}
-            onLike={() => handleLike(post)}
-            onRepost={() => handleRepost(post)}
-            onBookmark={() => handleBookmark(post)}
-            onShare={() => handleShare(post)}
-            onComment={() => openComments(post)}
-            onDelete={() => handleDelete(post)}
-            onOpenProfile={() => onOpenProfile(post.user_id)}
-            onOpenMedia={() => post.media_url && setLightbox({ url: post.media_url, type: resolveMediaType(post.media_type) })}
-            onView={() => markViewed(post.id)}
-            isOwner={post.user_id === user?.id}
-            timeLabel={timeAgo(post.created_at, locale)}
+            onLike={() => handleLike(item.post)}
+            onRepost={() => handleRepost(item.post)}
+            onBookmark={() => handleBookmark(item.post)}
+            onShare={() => handleShare(item.post)}
+            onComment={() => openComments(item.post)}
+            onDelete={() => handleDelete(item.post)}
+            onOpenProfile={() => onOpenProfile(item.post.user_id)}
+            onOpenReposter={() => item.repostedBy && onOpenProfile(item.repostedBy.id)}
+            onOpenMedia={() => item.post.media_url && setLightbox({ url: item.post.media_url, type: resolveMediaType(item.post.media_type) })}
+            onView={() => markViewed(item.post.id)}
+            isOwner={item.post.user_id === user?.id}
+            timeLabel={timeAgo(item.post.created_at, locale)}
           />
         ))
       )}
@@ -565,7 +600,7 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
           </button>
         </div>
       )}
-      {!hasMore && posts.length > 0 && (
+      {!hasMore && items.length > 0 && (
         <p className="text-center text-xs text-slate-600 py-4">{t('feed.end')}</p>
       )}
 
@@ -575,19 +610,25 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
         onClose={() => setCommentModal(null)}
         title={t('feed.comments')}
         footer={
-          <div className="flex gap-2">
-            <input
-              className="input flex-1"
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
-              placeholder={t('feed.commentPlaceholder')}
-              maxLength={300}
-              onKeyDown={(e) => e.key === 'Enter' && sendComment()}
-            />
-            <button onClick={sendComment} className="btn-primary px-3" disabled={!commentText.trim() || sendingComment}>
-              {sendingComment ? <Spinner size="sm" /> : <Send className="h-4 w-4" />}
+          user ? (
+            <div className="flex gap-2">
+              <input
+                className="input flex-1"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value.slice(0, 300))}
+                placeholder={t('feed.commentPlaceholder')}
+                maxLength={300}
+                onKeyDown={(e) => e.key === 'Enter' && sendComment()}
+              />
+              <button onClick={sendComment} className="btn-primary px-3" disabled={!commentText.trim() || sendingComment}>
+                {sendingComment ? <Spinner size="sm" /> : <Send className="h-4 w-4" />}
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => requireAuth()} className="btn-primary w-full">
+              <LogIn className="h-4 w-4" /> {t('feed.signInToInteract')}
             </button>
-          </div>
+          )
         }
       >
         <div className="space-y-3 max-h-[40vh] overflow-y-auto no-scrollbar">
@@ -626,6 +667,7 @@ export function FeedPage({ onOpenProfile }: FeedPageProps) {
 
 interface PostCardProps {
   post: Post;
+  repostedBy: Post['author'] | null;
   locale: 'tr' | 'en';
   onLike: () => void;
   onRepost: () => void;
@@ -634,6 +676,7 @@ interface PostCardProps {
   onComment: () => void;
   onDelete: () => void;
   onOpenProfile: () => void;
+  onOpenReposter: () => void;
   onOpenMedia: () => void;
   onView: () => void;
   isOwner: boolean;
@@ -641,9 +684,10 @@ interface PostCardProps {
 }
 
 function PostCard({
-  post, onLike, onRepost, onBookmark, onShare, onComment, onDelete, onOpenProfile, onOpenMedia, onView, isOwner, timeLabel,
+  post, repostedBy, onLike, onRepost, onBookmark, onShare, onComment, onDelete, onOpenProfile, onOpenReposter, onOpenMedia, onView, isOwner, timeLabel,
 }: PostCardProps) {
   const articleRef = useRef<HTMLElement>(null);
+  const { t } = useSettings();
 
   // X/Twitter yalnızca bir gönderi gerçekten görünüme girdiğinde
   // "görüntülenme" sayısını artırır — mount anında değil.
@@ -666,6 +710,15 @@ function PostCard({
 
   return (
     <article ref={articleRef} className="card p-4 animate-slide-up">
+      {repostedBy && (
+        <button
+          onClick={onOpenReposter}
+          className="flex items-center gap-1.5 mb-2 -mt-0.5 text-[11px] font-semibold text-slate-500 hover:text-emerald-400 transition-colors"
+        >
+          <Repeat2 className="h-3.5 w-3.5" />
+          {repostedBy.display_name} {t('feed.repostedBy')}
+        </button>
+      )}
       <div className="flex items-start gap-3">
         <button onClick={onOpenProfile} className="shrink-0">
           <Avatar id={post.user_id} name={post.author?.display_name ?? ''} url={post.author?.avatar_url} size="md" />

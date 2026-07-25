@@ -5,6 +5,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { toast } from '@/components/Toast';
 import { Spinner } from '@/components/Spinner';
 import { Sparkles, ChevronRight, Check } from 'lucide-react';
+import { slugifyUsername } from '@/lib/utils';
 
 export function Onboarding() {
   const { user, refreshProfile } = useAuth();
@@ -36,7 +37,7 @@ export function Onboarding() {
       const { data } = await supabase
         .from('profiles')
         .select('id')
-        .eq('username', username.trim())
+        .ilike('username', username.trim())
         .neq('id', user?.id ?? '')
         .maybeSingle();
       if (data) {
@@ -65,8 +66,14 @@ export function Onboarding() {
       if (error) throw error;
       await refreshProfile();
       toast(t('auth.welcome'), 'success');
-    } catch {
-      toast(t('auth.errorGeneric'), 'error');
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code;
+      if (code === '23505') {
+        toast(t('onboard.usernameTaken'), 'error');
+        setStep(1);
+      } else {
+        toast(t('auth.errorGeneric'), 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -121,7 +128,7 @@ export function Onboarding() {
                 className="input"
                 autoFocus
                 value={username}
-                onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                onChange={(e) => setUsername(slugifyUsername(e.target.value))}
                 placeholder="username"
                 maxLength={20}
               />
