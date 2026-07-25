@@ -62,6 +62,35 @@ export function avatarGradient(id: string): string {
   return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
 }
 
+const TR_CHAR_MAP: Record<string, string> = {
+  ç: 'c', Ç: 'c',
+  ğ: 'g', Ğ: 'g',
+  ı: 'i', I: 'i', İ: 'i',
+  ö: 'o', Ö: 'o',
+  ş: 's', Ş: 's',
+  ü: 'u', Ü: 'u',
+};
+
+/**
+ * Turns free-typed text (display name, pasted handle, etc.) into a valid
+ * SEO-friendly username slug for the /u/:handle route: Turkish characters
+ * are transliterated to their closest Latin equivalent instead of being
+ * silently dropped (e.g. "Aslı Öz" -> "asli_oz", not "asl_z"), everything
+ * else is lowercased and restricted to [a-z0-9_], capped at 20 chars.
+ */
+export function slugifyUsername(input: string): string {
+  const transliterated = input
+    .split('')
+    .map((ch) => TR_CHAR_MAP[ch] ?? ch)
+    .join('');
+  return transliterated
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/_+/g, '_')
+    .slice(0, 20);
+}
+
 export function rateLimit<T extends (...args: never[]) => void>(fn: T, ms: number): T {
   let last = 0;
   return ((...args: never[]) => {

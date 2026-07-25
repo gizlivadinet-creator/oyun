@@ -6,6 +6,8 @@ export type NotificationType =
   | 'follow'
   | 'like'
   | 'comment'
+  | 'repost'
+  | 'post'
   | 'badge'
   | 'levelup'
   | 'system';
@@ -128,4 +130,19 @@ export interface MissionWithProgress extends Mission {
   progress: number;
   completed: boolean;
   claimed: boolean;
+}
+
+/**
+ * A single row in a merged timeline (global feed or a profile's timeline).
+ * `kind === 'repost'` means this entry exists because `repostedBy` reposted
+ * `post` — the post itself is unchanged, only the reason it's showing up
+ * here differs. This is what lets the UI render the "X reposted" banner and
+ * keep reposts visible in both the main feed and on profiles.
+ */
+export interface FeedItem {
+  key: string;
+  activityAt: string;
+  kind: 'post' | 'repost';
+  repostedBy: Profile | null;
+  post: Post;
 }

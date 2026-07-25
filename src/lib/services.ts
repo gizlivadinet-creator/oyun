@@ -1,20 +1,77 @@
 import { supabase } from '@/lib/supabase';
 import { todayKey, weekKey } from '@/lib/utils';
-import type { Post, Profile, Mission, UserMission, Badge, MissionWithProgress } from '@/lib/types';
+import type { Post, Profile, Mission, UserMission, Badge, MissionWithProgress, FeedItem } from '@/lib/types';
 
 const PAGE_SIZE = 10;
+const PROFILE_PAGE_SIZE = 20;
 
-export async function fetchFeed(page = 0): Promise<{ posts: Post[]; hasMore: boolean }> {
-  const { data, error } = await supabase
-    .from('posts')
-    .select('*, author:profiles!posts_user_id_fkey(*)')
-    .order('created_at', { ascending: false })
-    .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+interface RawFeedRow {
+  item_id: string;
+  activity_at: string;
+  kind: 'post' | 'repost';
+  reposted_by: Profile | null;
+  post: Post;
+}
 
+function mapFeedRows(rows: RawFeedRow[]): FeedItem[] {
+  return rows.map((row) => ({
+    key: row.item_id,
+    activityAt: row.activity_at,
+    kind: row.kind,
+    repostedBy: row.reposted_by,
+    post: row.post,
+  }));
+}
+
+/**
+ * Global, activity-ordered timeline: original posts *and* reposts, merged
+ * and sorted by the moment each entered the timeline. Works for signed-out
+ * visitors too (the underlying RPC is granted to `anon`), which is what
+ * lets the public feed render without requiring a login.
+ */
+export async function fetchFeed(page = 0): Promise<{ items: FeedItem[]; hasMore: boolean }> {
+  const { data, error } = await supabase.rpc('get_feed', {
+    p_limit: PAGE_SIZE + 1,
+    p_offset: page * PAGE_SIZE,
+  });
   if (error) throw error;
-  const posts = (data ?? []) as unknown as Post[];
-  const hasMore = posts.length > PAGE_SIZE;
-  return { posts: posts.slice(0, PAGE_SIZE), hasMore };
+  const rows = (data ?? []) as RawFeedRow[];
+  const hasMore = rows.length > PAGE_SIZE;
+  return { items: mapFeedRows(rows.slice(0, PAGE_SIZE)), hasMore };
+}
+
+/**
+ * Per-profile timeline: the user's own posts plus the posts they reposted,
+ * merged the same way as the global feed so reposts actually show up (with
+ * a "reposted" banner) instead of being silently dropped from the profile.
+ */
+export async function fetchUserFeed(userId: string, page = 0): Promise<{ items: FeedItem[]; hasMore: boolean }> {
+  const { data, error } = await supabase.rpc('get_user_feed', {
+    p_user_id: userId,
+    p_limit: PROFILE_PAGE_SIZE + 1,
+    p_offset: page * PROFILE_PAGE_SIZE,
+  });
+  if (error) throw error;
+  const rows = (data ?? []) as RawFeedRow[];
+  const hasMore = rows.length > PROFILE_PAGE_SIZE;
+  return { items: mapFeedRows(rows.slice(0, PROFILE_PAGE_SIZE)), hasMore };
+}
+
+/**
+ * The signed-in user's saved posts, newest bookmark first. Bookmarks are
+ * private (RLS only allows the owner to read their own rows), so this only
+ * ever returns the caller's own saves.
+ */
+export async function fetchBookmarkedPosts(userId: string): Promise<Post[]> {
+  const { data, error } = await supabase
+    .from('bookmarks')
+    .select('created_at, post:posts(*, author:profiles!posts_user_id_fkey(*))')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as unknown as Array<{ post: Post | null }>)
+    .map((row) => row.post)
+    .filter((p): p is Post => !!p);
 }
 
 export async function fetchLikedIds(postIds: string[], userId: string): Promise<Set<string>> {
@@ -378,6 +435,25 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
     .eq('user_id', userId)
     .eq('read', false);
   if (error) throw error;
+}
+
+/**
+ * Subscribes to live notification inserts/updates for a user via Supabase
+ * Realtime, so the bell badge and the notifications list update instantly
+ * instead of waiting for the next poll. Returns an unsubscribe function.
+ */
+export function subscribeToNotifications(userId: string, onChange: () => void): () => void {
+  const channel = supabase
+    .channel(`notifications:${userId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+      () => onChange(),
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 export async function fetchUnreadNotificationCount(userId: string): Promise<number> {

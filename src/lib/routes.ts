@@ -13,6 +13,7 @@ export type ScreenId =
   | 'profile'
   | 'settings'
   | 'notifications'
+  | 'bookmarks'
   | 'admin'
   | 'auth'
   | 'offline'
@@ -36,6 +37,7 @@ export const routes: RouteDef[] = [
   { pattern: '/discover', screen: 'coming-soon', labelKey: 'nav.discover' },
   { pattern: '/search', screen: 'coming-soon', labelKey: 'nav.search' },
   { pattern: '/notifications', screen: 'notifications' },
+  { pattern: '/bookmarks', screen: 'bookmarks' },
   { pattern: '/messages', screen: 'coming-soon', labelKey: 'nav.messages' },
   { pattern: '/friends', screen: 'coming-soon', labelKey: 'nav.friends' },
   { pattern: '/following', screen: 'coming-soon', labelKey: 'nav.following' },

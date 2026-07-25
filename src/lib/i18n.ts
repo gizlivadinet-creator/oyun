@@ -39,6 +39,7 @@ const tr: Dict = {
   'nav.ranks': 'Liderlik',
   'nav.profile': 'Profil',
   'nav.notifications': 'Bildirimler',
+  'nav.bookmarks': 'Kaydedilenler',
   'nav.settings': 'Ayarlar',
   'nav.admin': 'Yönetim',
   'nav.discover': 'Gündem',
@@ -104,6 +105,11 @@ const tr: Dict = {
   'feed.share': 'Paylaş',
   'feed.linkCopied': 'Bağlantı kopyalandı',
   'feed.views': 'Görüntülenme',
+  'feed.repostedByYou': 'Repostladın',
+  'feed.repostedBy': 'repostladı',
+  'feed.signInToInteract': 'Etkileşimde bulunmak için giriş yap',
+  'feed.signInToPost': 'Paylaşım yapmak için giriş yap',
+  'feed.signInCta': 'Giriş Yap',
 
   // Profile
   'profile.level': 'Seviye',
@@ -164,9 +170,15 @@ const tr: Dict = {
   'notif.follow': 'seni takip etmeye başladı',
   'notif.like': 'gönderini beğendi',
   'notif.comment': 'gönderine yorum yaptı',
+  'notif.repost': 'gönderini repostladı',
+  'notif.post': 'yeni bir gönderi paylaştı',
   'notif.badge': 'Yeni rozet kazandın',
   'notif.levelup': 'Seviye atladın!',
   'notif.system': 'Sistem',
+
+  // Bookmarks
+  'bookmarks.title': 'Kaydedilenler',
+  'bookmarks.empty': 'Henüz kaydedilen gönderi yok.',
 
   // Settings
   'settings.title': 'Ayarlar',
@@ -302,6 +314,7 @@ const en: Dict = {
   'nav.ranks': 'Ranks',
   'nav.profile': 'Profile',
   'nav.notifications': 'Notifications',
+  'nav.bookmarks': 'Bookmarks',
   'nav.settings': 'Settings',
   'nav.admin': 'Admin',
   'nav.discover': 'Discover',
@@ -366,6 +379,11 @@ const en: Dict = {
   'feed.share': 'Share',
   'feed.linkCopied': 'Link copied',
   'feed.views': 'Views',
+  'feed.repostedByYou': 'You reposted',
+  'feed.repostedBy': 'reposted',
+  'feed.signInToInteract': 'Sign in to interact',
+  'feed.signInToPost': 'Sign in to post',
+  'feed.signInCta': 'Sign In',
 
   'profile.level': 'Level',
   'profile.xp': 'XP',
@@ -422,9 +440,14 @@ const en: Dict = {
   'notif.follow': 'started following you',
   'notif.like': 'liked your post',
   'notif.comment': 'commented on your post',
+  'notif.repost': 'reposted your post',
+  'notif.post': 'shared a new post',
   'notif.badge': 'You earned a new badge',
   'notif.levelup': 'You leveled up!',
   'notif.system': 'System',
+
+  'bookmarks.title': 'Bookmarks',
+  'bookmarks.empty': "You haven't bookmarked any posts yet.",
 
   'settings.title': 'Settings',
   'settings.language': 'Language',
