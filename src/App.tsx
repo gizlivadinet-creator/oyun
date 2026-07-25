@@ -2,7 +2,6 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { SettingsProvider } from '@/context/SettingsContext';
 import { ToastContainer } from '@/components/Toast';
 import { FullScreenSpinner } from '@/components/Spinner';
-import { AuthPage } from '@/pages/AuthPage';
 import { Onboarding } from '@/pages/Onboarding';
 import { AppShell } from '@/components/AppShell';
 import { useSettings } from '@/context/SettingsContext';
@@ -16,11 +15,11 @@ function Gate() {
     return <FullScreenSpinner label={t('auth.loading')} />;
   }
 
-  if (!session) {
-    return <AuthPage />;
-  }
-
-  if (needsOnboarding || !profile) {
+  // Signed-in but hasn't finished onboarding yet -> must finish before
+  // anything else. A guest (no session at all) skips straight to AppShell,
+  // which renders the public feed/profiles and only asks for a login when
+  // an interactive action needs one (see AuthContext.requireAuth).
+  if (session && (needsOnboarding || !profile)) {
     return <Onboarding />;
   }
 
