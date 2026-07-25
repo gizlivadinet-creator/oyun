@@ -1,12 +1,12 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { Home, Compass, Target, Trophy, User as UserIcon, Bell, Settings as SettingsIcon, Shield } from 'lucide-react';
+import { Home, Compass, Target, Trophy, User as UserIcon, Bell, Bookmark, Settings as SettingsIcon, Shield } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { cn } from '@/lib/utils';
-import { fetchUnreadNotificationCount } from '@/lib/services';
+import { fetchUnreadNotificationCount, subscribeToNotifications } from '@/lib/services';
 import { Spinner } from '@/components/Spinner';
 import { useRouter, resolveRoute } from '@/lib/router';
-import { routes, NOT_FOUND_ROUTE } from '@/lib/routes';
+import { routes, NOT_FOUND_ROUTE, type ScreenId } from '@/lib/routes';
 
 const FeedPage = lazy(() => import('@/pages/FeedPage').then((m) => ({ default: m.FeedPage })));
 const ExplorePage = lazy(() => import('@/pages/ExplorePage').then((m) => ({ default: m.ExplorePage })));
@@ -15,11 +15,17 @@ const LeaderboardPage = lazy(() => import('@/pages/LeaderboardPage').then((m) =>
 const ProfilePage = lazy(() => import('@/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 const NotificationsPage = lazy(() => import('@/pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
+const BookmarksPage = lazy(() => import('@/pages/BookmarksPage').then((m) => ({ default: m.BookmarksPage })));
 const AdminPage = lazy(() => import('@/pages/AdminPage').then((m) => ({ default: m.AdminPage })));
+const AuthPage = lazy(() => import('@/pages/AuthPage').then((m) => ({ default: m.AuthPage })));
 const ComingSoonPage = lazy(() => import('@/pages/ComingSoonPage').then((m) => ({ default: m.ComingSoonPage })));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 const ServerErrorPage = lazy(() => import('@/pages/ServerErrorPage').then((m) => ({ default: m.ServerErrorPage })));
 const OfflinePage = lazy(() => import('@/pages/OfflinePage').then((m) => ({ default: m.OfflinePage })));
+
+/** Screens that only make sense for a signed-in user — a guest hitting one
+ * of these gets sent to the login screen instead of a blank/broken page. */
+const AUTH_REQUIRED_SCREENS: ScreenId[] = ['notifications', 'bookmarks', 'settings', 'missions', 'admin'];
 
 type Tab = 'feed' | 'explore' | 'missions' | 'ranks' | 'profile';
 
@@ -32,18 +38,28 @@ const TAB_PATH: Record<Tab, string> = {
 };
 
 export function AppShell() {
-  const { profile } = useAuth();
+  const { session, profile, requireAuth } = useAuth();
   const { t } = useSettings();
   const { path, navigate } = useRouter();
   const [unread, setUnread] = useState(0);
 
+  // Live unread count: an initial fetch plus a realtime subscription so a
+  // like/comment/follow/repost notification updates the bell instantly
+  // instead of waiting on a poll interval. A 60s poll is kept as a safety
+  // net in case the realtime socket drops.
   useEffect(() => {
-    if (!profile) return;
-    fetchUnreadNotificationCount(profile.id).then(setUnread).catch(() => {});
-    const interval = setInterval(() => {
-      fetchUnreadNotificationCount(profile.id).then(setUnread).catch(() => {});
-    }, 30000);
-    return () => clearInterval(interval);
+    if (!profile) {
+      setUnread(0);
+      return;
+    }
+    const refresh = () => fetchUnreadNotificationCount(profile.id).then(setUnread).catch(() => {});
+    refresh();
+    const unsubscribe = subscribeToNotifications(profile.id, refresh);
+    const interval = setInterval(refresh, 60000);
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [profile]);
 
   const matched = resolveRoute(routes, path) ?? { route: NOT_FOUND_ROUTE, params: {} };
@@ -52,8 +68,16 @@ export function AppShell() {
 
   useEffect(() => {
     // Zaten oturum açmış bir kullanıcı /auth/* rotalarına girerse akışa yönlendir.
-    if (screen === 'auth') navigate('/feed', { replace: true });
-  }, [screen, navigate]);
+    if (screen === 'auth' && session) {
+      navigate('/feed', { replace: true });
+      return;
+    }
+    // Misafir kullanıcı, giriş gerektiren bir ekrana doğrudan URL ile
+    // giderse akışı kesmek yerine giriş ekranına yönlendirilir.
+    if (screen !== 'auth' && !session && AUTH_REQUIRED_SCREENS.includes(screen)) {
+      navigate('/auth/login', { replace: true });
+    }
+  }, [screen, session, navigate]);
 
   const openProfile = (id: string) => navigate(`/u/${id}`);
   const goFeed = () => navigate('/feed');
@@ -77,6 +101,17 @@ export function AppShell() {
   // /profile -> kendi profilim, /u/:handle -> ilgili kullanıcı
   const profileHandle = params.handle ?? profile?.id ?? '';
 
+  // /auth/login ve /auth/register, uygulama header/alt navigasyonu olmadan
+  // tam ekran gösterilir (zaten giriş yapmış kullanıcı yukarıdaki effect ile
+  // akışa geri yönlendirilir).
+  if (screen === 'auth') {
+    return (
+      <Suspense fallback={<div className="flex justify-center py-20"><Spinner size="lg" /></div>}>
+        <AuthPage />
+      </Suspense>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col max-w-md mx-auto relative">
       {/* Top bar */}
@@ -97,7 +132,14 @@ export function AppShell() {
 
           <div className="flex items-center gap-1">
             <button
-              onClick={() => navigate('/notifications')}
+              onClick={() => (requireAuth() ? navigate('/bookmarks') : undefined)}
+              className={cn('btn-ghost p-2 rounded-lg', screen === 'bookmarks' && 'bg-emerald-500/10 text-emerald-400')}
+              aria-label={t('nav.bookmarks')}
+            >
+              <Bookmark className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => (requireAuth() ? navigate('/notifications') : undefined)}
               className="relative btn-ghost p-2 rounded-lg"
               aria-label={t('nav.notifications')}
             >
@@ -118,7 +160,7 @@ export function AppShell() {
               </button>
             )}
             <button
-              onClick={() => navigate('/settings')}
+              onClick={() => (requireAuth() ? navigate('/settings') : undefined)}
               className={cn('btn-ghost p-2 rounded-lg', screen === 'settings' && 'bg-emerald-500/10 text-emerald-400')}
               aria-label={t('nav.settings')}
             >
@@ -165,7 +207,11 @@ export function AppShell() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => navigate(TAB_PATH[tab.id])}
+                  onClick={() => {
+                    if (tab.id === 'profile' && !requireAuth()) return;
+                    if (tab.id === 'missions' && !requireAuth()) return;
+                    navigate(TAB_PATH[tab.id]);
+                  }}
                   className={cn('nav-item', active ? 'text-emerald-400' : 'text-slate-500')}
                 >
                   <Icon className={cn('h-5 w-5 transition-transform', active && 'scale-110')} />
